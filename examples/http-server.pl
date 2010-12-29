@@ -7,7 +7,7 @@ use lib "./lib", "./blib/arch";
 
 use Nginx::Engine;
 
-ngxe_init("", 1, 256),
+ngxe_init("", 256),
 
 ngxe_server('*', 55555, sub {
 
@@ -41,7 +41,7 @@ ngxe_server('*', 55555, sub {
                         "Content-type: text/html\x0d\x0a".
                         "\x0d\x0a".
                         "Ok\x0d\x0a";
-            } else {
+            } elsif ($uri ne '') {
                 $_[3] = "HTTP/1.0 404 Not Found\x0d\x0a".
                         "Content-type: text/html\x0d\x0a".
                         "\x0d\x0a".

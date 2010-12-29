@@ -73,7 +73,7 @@ ngxe_reader_handler(ngx_event_t *ev)
     cur = SvCUR(svbuf);
     len = SvLEN(svbuf);
 
-    if (len - cur - 1 < 2048) {
+    if (len - cur - 1 < 4096) {
         SvGROW(svbuf, cur + 16384 + 1); 
         len = SvLEN(svbuf);
     }
@@ -118,7 +118,7 @@ ngxe_reader_handler(ngx_event_t *ev)
 			"ngxe_reader_handler(): n = %ui", n);
 */
 
-	if (!c->read->timer_set) {
+	if (!c->read->timer_set && s->reader_timeout) {
 	    ngx_add_timer(c->read, s->reader_timeout);
 	}
 
@@ -179,7 +179,7 @@ ngxe_reader_start(ngx_connection_t *c)
 
     c->read->handler = ngxe_reader_handler;
 
-    if (!c->read->timer_set) {
+    if (!c->read->timer_set && s->reader_timeout) {
 	ngx_add_timer(c->read, s->reader_timeout);
     }
 
@@ -332,7 +332,7 @@ ngxe_writer_handler(ngx_event_t *ev)
 	    /* force to process event again */
 	    /* c->write->ready = 0; */ /* TODO remove this */
 
-	    if (!c->write->timer_set) {
+	    if (!c->write->timer_set && s->writer_timeout) {
 		ngx_add_timer(c->write, s->writer_timeout);
 	    }
 
@@ -396,7 +396,7 @@ ngxe_writer_start(ngx_connection_t *c)
 
     c->write->handler = ngxe_writer_handler;
 
-    if (!c->write->timer_set) {
+    if (!c->write->timer_set && s->writer_timeout) {
 	ngx_add_timer(c->write, s->writer_timeout);
     }
 

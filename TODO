@@ -1,9 +1,29 @@
 
-  - Add "ngxe_initialized" flag to prevent any XS function to be executed
-    before initialization.
+Performance:
 
-  - Add additional c->destroyed check to somehow prevent non-intentional 
-    double close 
+  - ngxe_reader_stop_writer_start() and ngxe_reader_start_writer_stop()
+    to avoid unnecessary perl->xsub call
+
+  - create another type of caller to avoid unnecessary perl->xsub
+    calls, ngxe_reader_server() or something that handles reads and 
+    switches to the writer after return if there is some data in
+    the output buffer and than switches back and awaits for new 
+    data in the read buffer, kind of reader's point of control
+    and maybe do the same with the writer's point of control 
+
+General:
+
+  - improve documentation
+
+  - consider cleanup callbacks instead of return on error
 
   - ngxe_http_server()
 
+  - ngxe_resolve()
+
+
+Someday:
+
+  - rewrite nginx ./configure scripts to use MakeMaker and to be able 
+    to build nginx on windows and other platforms along with the 
+    Nginx::Engine

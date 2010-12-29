@@ -7,5 +7,7 @@
 #include <ngxe_xs.h>
 #include <ngxe_connection.h>
 
+int ngxe_initialized;
+
 #endif /* _NGXE_H_INCLUDED_ */
 

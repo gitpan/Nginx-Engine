@@ -31,17 +31,19 @@ our @EXPORT = qw(
     ngxe_reader
     ngxe_reader_start
     ngxe_reader_stop
+    ngxe_reader_timeout
 
     ngxe_writer
     ngxe_writer_start
     ngxe_writer_stop
+    ngxe_writer_timeout
 
     ngxe_close
 
     ngxe_loop
 );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 require XSLoader;
 XSLoader::load('Nginx::Engine', $VERSION);
@@ -53,39 +55,43 @@ __END__
 
 =head1 NAME
 
-Nginx::Engine - asynchronous framework based on nginx
+Nginx::Engine - Asynchronous framework based on nginx
 
 =head1 SYNOPSIS
 
     use Nginx::Engine;
-    ngxe_init("./ngxe-error.log", 0, 4096);
 
-    # Creating server that accepts connection, 
-    # sends "hi" and closes connection
+    # Creating event loop with 4096 connetions
+    # and ngxe-error.log as error log.
+    ngxe_init("./ngxe-error.log", 4096);
+
+    # Server that accepts new connection, 
+    # sends "hi" and closes it.
     ngxe_server('*', 55555, sub {
         ngxe_writer($_[0], 1, 1000, "hi", sub {
-            if ($_[1]) {
-                return;
-            }
+            # $_[1] is error and return on error is always required
+            # and it's there so you can do some cleanup if you need to.
+            return if $_[1];
 
             ngxe_close($_[0]);
         });
     });
 
-    # Creating server that reads whatever 
-    # comes first and closes connection
+    # Server that reads whatever comes first
+    # sends it back and closes connection. 
     ngxe_server('*', 55555, sub {
-        ngxe_reader($_[0], 1, 1000, sub {
-            if ($_[1]) {
-                return;
-            }
+        ngxe_reader($_[0], 1, 5000, sub {
+            return if $_[1];
 
-            print "got $_[2]\n";
-            ngxe_close($_[0]);
+            ngxe_writer)$_[0], 1, 5000, $_[2], sub {
+                return if $_[1];
+
+                ngxe_close($_[0]);
+            });
         });
     });
 
-    # Connecting to 127.0.0.1:80 and disconnecting
+    # Connecting to 127.0.0.1:80 and disconnecting.
     ngxe_client('*', '127.0.0.1', 80, 2000, sub {
         if ($_[1]) {
             warn "$_[1]\n";
@@ -96,14 +102,41 @@ Nginx::Engine - asynchronous framework based on nginx
         ngxe_close($_[0]);
     });
 
-    # Saying N. Hello, World! every second
+    # Saying "N. Hello, World!" every second
     ngxe_interval_set(1000, sub { 
         print "$_[2]. Hello, $_[1]!\n"; 
         $_[2]++ 
     }, "World", 1);
 
-    # Saying Hello world once in 5 seconds.
-    ngxe_timeout_set(5000, sub { print "Hello, $_[1]!"; }, "World");
+    # Saying "Hello World!" once after 5000 ms.
+    ngxe_timeout_set(5000, sub { 
+        print "Hello, $_[1]!"; 
+    }, "World");
+
+
+    # Server that echoes everyhing back to the client.
+    ngxe_server('*', 55555, sub {
+        ngxe_reader($_[0], 1, 5000, sub {
+            return if $_[1];
+
+            $_[3] = $_[2]; # copying read buffer to the write buffer
+            $_[2] = '';    # clearing read buffer
+
+            # to writer
+            ngxe_reader_stop($_[0]);
+            ngxe_writer_start($_[0]);
+        });
+
+        ngxe_writer($_[0], 0, 5000, '', sub {
+            return if $_[1];
+
+            # write buffer sent and cleared for us 
+
+            # back to reader
+            ngxe_writer_stop($_[0]);
+            ngxe_reader_start($_[0]);
+        });
+    });
 
     ngxe_loop;
 
@@ -114,19 +147,31 @@ Nginx::Engine is a simple high-performance asynchronous networking framework.
 It's intended to bring nodejs-like performance and nginx's stability 
 into Perl. 
 
-The main difference from other frameworks is a little higher level 
+The main difference from other frameworks is a little bit higher level 
 of abstraction. There are no descriptors nor sockets, everything works 
-with connections instead. 
+with connections instead. Internally connection is just a pointer to the 
+ngx_connection_t structure. So it is as fast as it can possibly be. 
 
-=head1 SUPPORTED OS
+Performance of the engine is one thing you might want to verify yourself. 
+I did some benchmarking with F<ab> and as it turns out simple http server 
+from F<examples/> directory outperforms similar example of nodejs by 30%.
 
-Any unix or linux with B<gcc>, B<sh>, B<perl> and B<nginx> should be ok.
+=head1 SUPPORTED OPERATING SYSTEMS
+
+Any unix or linux with working gcc, sh, perl and nginx should be ok.
+It mostly depends on the ability to build nginx in a way that it can be 
+linked with as a shared library. If there is a problem you can
+build nginx manually. Configure it without http module and with compiler 
+option, that allows it to be linked as a shared library (not required for 
+gcc on x86 and -fPIC for gcc on amd64). 
 
 Tested on: 
+
     FreeBSD 6.4 i386
     FreeBSD 8.0 i386
     Fedora Linux 2.6.33.6-147.fc13.i686.PAE
     Fedora Linux 2.6.18-128.2.1.el5.028stab064.7
+    Linux cono-desktop 2.6.35-24-generic #42-Ubuntu SMP x86_64
 
 =head1 EXPORT
 
@@ -147,10 +192,12 @@ The following functions are exported by default:
     ngxe_reader
     ngxe_reader_start
     ngxe_reader_stop
+    ngxe_reader_timeout
 
     ngxe_writer
     ngxe_writer_start
     ngxe_writer_stop
+    ngxe_writer_timeout
 
     ngxe_close
 
@@ -158,19 +205,16 @@ The following functions are exported by default:
 
 =head1 INITIALIZATION
 
-Before you can do anything you MUST initialize the engine by calling 
+Before you can do anything you have to initialize the engine by calling 
 C<ngxe_init()> at the very beginning of your code. You cannot call any
 other fuction before that. 
 
-
-=head2 ngxe_init(error_log_path, use_stderr, connections)
+=head2 ngxe_init(ERROR_LOG[, CONNECTIONS])
 
 Nginx requires error log to start. It is important to log error if some
 system call fails or nginx runs out of some resource, like number of
 connections or open files. You should always use log. But you can leave
 it empty if you want to. 
-
-To use STDERR as a log too you should set use_stderr flag to 1.
 
 Number of connections must be less than number of open files and sockets 
 per process allowed by the system. You probably would need to tune your 
@@ -178,7 +222,7 @@ system anyway to use more then a couple of thousands.
 
 So, I suggest to start with something like this:
 
-    ngxe_init("./ngxe-error.log", 0, 4096);
+    ngxe_init("./ngxe-error.log", 4096);
 
 =head1 TIMER
 
@@ -317,8 +361,10 @@ processing schemes.
 
 Creates a reader for connection identified as I<CONN>. Starts it
 immediately if I<START> is 1. If no data has been received in I<TIMEOUT> ms
-executes i<CALLBACK> with error flag set to timeout. Extra args can be
+executes I<CALLBACK> with error flag set to timeout. Extra args can be
 placed after I<CALLBACK>, as usual. 
+
+If I<TIMEOUT> is set 0 it's not going to be used. This feature added in 0.02.
 
 Returns undef on error.
 
@@ -356,12 +402,19 @@ Starts reader for I<CONN>.
 
 Stops reader for I<CONN>.
 
+=head2 ngxe_reader_timeout(CONN[, TIMEOUT])
+
+Returns current timeout for the reader and sets it to I<TIMEOUT> 
+if specified.
+
 =head2 ngxe_writer(CONN, START, TIMEOUT, DATA, CALLBACK, ...)
 
 Creates a writer for connection identified as I<CONN>. Starts it
 immediately if I<START> is 1. If no data has been send in I<TIMEOUT> ms
-executes i<CALLBACK> with error flag set to timeout. Extra args can be
+executes I<CALLBACK> with error flag set to timeout. Extra args can be
 placed after I<CALLBACK>, as usual. Puts I<DATA> into the write buffer.
+
+If I<TIMEOUT> is set 0 it's not going to be used. This feature added in 0.02.
 
 Returns undef on error.
 
@@ -399,6 +452,11 @@ Starts writer for I<CONN>.
 
 Stops writer for I<CONN>
 
+=head2 ngxe_writer_timeout(CONN[, TIMEOUT])
+
+Returns current timeout for the writer and sets it to I<TIMEOUT> 
+if specified.
+
 =head1 CLOSE
 
 =head2 ngxe_close(CONN)
@@ -412,7 +470,7 @@ A bit more complex example involving manipulation with the buffers.
 
     use Nginx::Engine;
 
-    ngxe_init("", 0, 64),
+    ngxe_init("", 64),
 
     ngxe_server("*", 55555, sub {
         ngxe_reader($_[0], 0, 5000, sub { 
@@ -472,7 +530,7 @@ Alexandr Gomoliako <zzz@zzz.org.ua>
 
 =head1 LICENSE
 
-Copyright 2010 Alexadnr Gomoliako. All rights reserved.
+Copyright 2010 Alexandr Gomoliako. All rights reserved.
 
 FreeBSD-like license. Take a look at F<LICENSE> and F<LICENSE.nginx> files.
 

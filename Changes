@@ -4,3 +4,10 @@ Revision history for Perl extension Nginx::Engine.
 	- original version; created by h2xs 1.23 with options
 		-A -n Nginx::Engine
 
+0.02  Wed Dec 29 21:58:40 2010 GMT
+	- reader and writer timeouts can be changed via *_start functions
+	  as a second argument;
+	- added ngxe_reader_timeout, ngxe_writer_timeout;
+	- added initialization flag check in every XS function;
+	- ngxe_init requires only single argument now, allocating
+	  512 connections by default, old syntax is still supported

@@ -16,6 +16,11 @@ ngxe_interval_set(msec, sub, ...)
 	ngxe_callback_t   *cb;
 	int               i;
 
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	c = ngx_get_connection((ngx_socket_t) 0, ngx_cycle->log);
 	if (c == NULL) {
 		XSRETURN_UNDEF;
@@ -77,6 +82,11 @@ ngxe_interval_clear(p)
 	ngxe_interval_t   *interval;
 	ngx_connection_t  *c;
 
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	interval = (ngxe_interval_t *) p;
 	c = interval->connection;
 
@@ -97,6 +107,11 @@ ngxe_timeout_set(msec, sub, ...)
 	ngxe_interval_t   *interval;
 	ngxe_callback_t   *cb;
 	int               i;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
 
 	c = ngx_get_connection((ngx_socket_t) 0, ngx_cycle->log);
 	if (c == NULL) {
@@ -161,6 +176,11 @@ ngxe_timeout_clear(p)
 	ngxe_interval_t   *interval;
 	ngx_connection_t  *c;
 
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	interval = (ngxe_interval_t *) p;
 	c = interval->connection;
 
@@ -185,6 +205,11 @@ ngxe_reader(connection, start, timeout, sub, ...)
 	ngx_pool_cleanup_t  *cbcln;
 	ngxe_session_t      *s;
 	int                  i, args_offset, args_extra;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
 
 	c = (ngx_connection_t *) connection;
 	if (c == NULL || c->pool == NULL) {
@@ -291,17 +316,129 @@ ngxe_reader(connection, start, timeout, sub, ...)
 
 
 
-void
-ngxe_reader_start(connection) 
+int
+ngxe_reader_timeout(connection, ...) 
 	void  *connection
     CODE:
-	ngxe_reader_start((ngx_connection_t *) connection);
+	ngx_connection_t    *c;
+	ngxe_session_t      *s;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	c = (ngx_connection_t *) connection;
+	if (c == NULL || c->pool == NULL) {
+		warn("Argument 0 (connection) is not a valid connection "
+		     "pointer");
+		XSRETURN_UNDEF;
+	}
+
+	s = (ngxe_session_t *) c->data;
+	if (s == NULL) {
+		warn("Connection doesn't have a session pointer");
+		XSRETURN_UNDEF;
+	}
+
+	if (items > 2) {
+		warn("Too many arguments for ngxe_reader_timeout (ignored)");
+	}
+
+	RETVAL = s->reader_timeout;
+
+	if (items >= 2) {
+		s->reader_timeout = SvIV(ST(1));
+	}
+    OUTPUT:
+	RETVAL
+
+
+int
+ngxe_writer_timeout(connection, ...) 
+	void  *connection
+    CODE:
+	ngx_connection_t    *c;
+	ngxe_session_t      *s;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	c = (ngx_connection_t *) connection;
+	if (c == NULL || c->pool == NULL) {
+		warn("Argument 0 (connection) is not a valid connection "
+		     "pointer");
+		XSRETURN_UNDEF;
+	}
+
+	s = (ngxe_session_t *) c->data;
+	if (s == NULL) {
+		warn("Connection doesn't have a session pointer");
+		XSRETURN_UNDEF;
+	}
+
+	if (items > 2) {
+		warn("Too many arguments for ngxe_writer_timeout (ignored)");
+	}
+
+	RETVAL = s->writer_timeout;
+
+	if (items >= 2) {
+		s->writer_timeout = SvIV(ST(1));
+	}
+    OUTPUT:
+	RETVAL
+
+
+
+void
+ngxe_reader_start(connection, ...) 
+	void  *connection
+    CODE:
+	ngx_connection_t    *c;
+	ngxe_session_t      *s;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	c = (ngx_connection_t *) connection;
+	if (c == NULL || c->pool == NULL) {
+		warn("Argument 0 (connection) is not a valid connection "
+		     "pointer");
+		XSRETURN_UNDEF;
+	}
+
+	s = (ngxe_session_t *) c->data;
+	if (s == NULL) {
+		warn("Connection doesn't have a session pointer");
+		XSRETURN_UNDEF;
+	}
+
+	if (items > 2) {
+		warn("Too many arguments for ngxe_reader_start (ignored)");
+	}
+
+	if (items >= 2) {
+		/* updating reader_timeout */
+		s->reader_timeout = SvIV(ST(1));
+	}
+
+	ngxe_reader_start(c);
 
 
 void
 ngxe_reader_stop(connection) 
 	void  *connection
     CODE:
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	ngxe_reader_stop((ngx_connection_t *) connection);
 
 
@@ -319,6 +456,11 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 	ngx_pool_cleanup_t  *cbcln;
 	ngxe_session_t      *s;
 	int                  i, args_offset, args_extra;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
 
 	c = (ngx_connection_t *) connection;
 	if (c == NULL || c->pool == NULL) {
@@ -429,9 +571,38 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 
 
 void
-ngxe_writer_start(connection) 
+ngxe_writer_start(connection, ...) 
 	void  *connection
     CODE:
+	ngx_connection_t    *c;
+	ngxe_session_t      *s;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	c = (ngx_connection_t *) connection;
+	if (c == NULL || c->pool == NULL) {
+		warn("Argument 0 (connection) is not a valid connection "
+		     "pointer");
+		XSRETURN_UNDEF;
+	}
+
+	s = (ngxe_session_t *) c->data;
+	if (s == NULL) {
+		warn("Connection doesn't have a session pointer");
+		XSRETURN_UNDEF;
+	}
+
+	if (items > 2) {
+		warn("Too many arguments for ngxe_writer_start (ignored)");
+	}
+
+	if (items >= 2) {
+		/* updating writer_timeout */
+		s->writer_timeout = SvIV(ST(1));
+	}
 	ngxe_writer_start((ngx_connection_t *) connection);
 
 
@@ -439,6 +610,11 @@ void
 ngxe_writer_stop(connection) 
 	void  *connection
     CODE:
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	ngxe_writer_stop((ngx_connection_t *) connection);
 
 
@@ -449,6 +625,11 @@ void
 ngxe_close(connection) 
 	void  *connection
     CODE:
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	ngxe_close((ngx_connection_t *) connection);
 
 
@@ -473,6 +654,11 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 	ngx_pool_cleanup_t     *cbcln;
 	ngx_int_t               rc;
 	int                     i, args_offset, args_extra;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
 
 	if (*bind_address == 0 || *bind_address == '*') {
 		bind_inaddr = INADDR_ANY;
@@ -625,6 +811,11 @@ ngxe_server(address, port, sub, ...)
 	ngx_pool_cleanup_t  *cbcln;
 	int                  i, args_offset, args_extra;
 
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	if (*address == 0 || *address == '*') {
 		inaddr = INADDR_ANY;
 	} else {
@@ -699,17 +890,42 @@ ngxe_server(address, port, sub, ...)
 
 
 void 
-ngxe_init(filename, usestderr, connections)
+ngxe_init(filename, ...)
 	char *filename
-	int   usestderr
-	int   connections
     CODE:
-	ngx_ngxe_init(filename, usestderr, connections);
+	int connections;
+
+	if (ngxe_initialized == 1) {
+		croak("Already initialized");
+		XSRETURN_UNDEF;
+	}
+
+	connections = 512;
+
+	if (items == 3) { /* compatible with old ngxe_init() */
+		connections = SvIV(ST(2));
+	} else if (items >= 2) {
+		connections = SvIV(ST(1));
+	}
+
+	if (connections < 16) {
+		warn("Number of connections is too low, using 16 instead");
+		connections = 16;
+	}
+
+	ngx_ngxe_init(filename, 0, connections);
+
+	ngxe_initialized = 1;
 
 
 void
 ngxe_loop()
     CODE:
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
 	SAVETMPS;
 	for (;;) {
 		ngx_process_events_and_timers((ngx_cycle_t *) ngx_cycle);
