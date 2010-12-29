@@ -1,0 +1,9 @@
+
+  - Add "ngxe_initialized" flag to prevent any XS function to be executed
+    before initialization.
+
+  - Add additional c->destroyed check to somehow prevent non-intentional 
+    double close 
+
+  - ngxe_http_server()
+

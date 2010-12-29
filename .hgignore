@@ -1,0 +1,16 @@
+\.core$
+\.bundle$
+\.old$
+\.o$
+\.bs$
+Engine.c$
+\.log$
+\.(?:gif|jpe?g|png|psd|bmp|avi|doc)
+tmon.out$
+logs/.+
+tmp/.+
+^blib/
+^pm_to_blib$
+^nginx/objs/
+^nginx/Makefile
+^Makefile$
