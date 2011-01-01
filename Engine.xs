@@ -394,6 +394,54 @@ ngxe_writer_timeout(connection, ...)
 
 
 void
+ngxe_writer_buffer_set(connection, data) 
+	void  *connection
+	SV    *data
+    CODE:
+	ngx_connection_t    *c;
+	ngxe_session_t      *s;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	c = (ngx_connection_t *) connection;
+	if (c == NULL || c->pool == NULL) {
+		warn("Argument 0 (connection) is not a valid connection "
+		     "pointer");
+		XSRETURN_UNDEF;
+	}
+
+	s = (ngxe_session_t *) c->data;
+	if (s == NULL) {
+		warn("Connection doesn't have a session pointer");
+		XSRETURN_UNDEF;
+	}
+
+	if (items > 2) {
+		croak("Too many arguments for ngxe_writer_append");
+		XSRETURN_UNDEF;
+	}
+
+	if (s->writer_buffer != NULL) {
+		if (SvCUR(data) == 0) {
+			XSRETURN_UNDEF;
+		}
+
+		sv_setsv(s->writer_buffer, data);
+		SvPOK_only(s->writer_buffer);
+
+		ngxe_writer_start(c);
+	} else {
+		warn("s->writer_buffer is not initialized, ignoring");
+		XSRETURN_UNDEF;
+	}
+
+
+
+
+void
 ngxe_reader_start(connection, ...) 
 	void  *connection
     CODE:
@@ -440,6 +488,20 @@ ngxe_reader_stop(connection)
 	}
 
 	ngxe_reader_stop((ngx_connection_t *) connection);
+
+
+
+void
+ngxe_reader_stop_writer_start(connection) 
+	void  *connection
+    CODE:
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	ngxe_reader_stop((ngx_connection_t *) connection);
+	ngxe_writer_start((ngx_connection_t *) connection);
 
 
 
@@ -619,6 +681,21 @@ ngxe_writer_stop(connection)
 
 
 
+void
+ngxe_writer_stop_reader_start(connection) 
+	void  *connection
+    CODE:
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	ngxe_writer_stop((ngx_connection_t *) connection);
+	ngxe_reader_start((ngx_connection_t *) connection);
+
+
+
+
 
 
 void
@@ -679,7 +756,7 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 		XSRETURN_UNDEF;
 	}
 
-	pool = ngx_create_pool(512, ngx_cycle->log);
+	pool = ngx_create_pool(1024, ngx_cycle->log);
 	if (pool == NULL) {
 		warn("Failed to create new nginx memory pool");
 		XSRETURN_UNDEF;
@@ -688,18 +765,21 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 	peer = ngxe_create_peer(pool, bind_inaddr, inaddr, (in_port_t) port);
 	if (peer == NULL) {
 		warn("Failed to create new nginx peer");
+		ngx_destroy_pool(pool);
 		XSRETURN_UNDEF;
 	}
 
 	cb = ngx_pcalloc(pool, sizeof(ngxe_callback_t));
 	if (cb == NULL) {
 		warn("Failed to allocate memory for callback");
+		ngx_destroy_pool(pool);
 		XSRETURN_UNDEF;
 	}
 
 	cbcln = ngx_pool_cleanup_add(pool, 0);
 	if (cbcln == NULL) {
 		warn("Failed to allocate memory for callback's cleanup");
+		ngx_destroy_pool(pool);
 		XSRETURN_UNDEF;
 	}
 
@@ -739,10 +819,23 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 
 	/* */
 
+	/* saving address as a name, required for logging  */
+	peer->name->len = inaddr_len;
+	peer->name->data = ngx_pnalloc(pool, peer->name->len);
+	if (peer->name->data == NULL) {
+		warn("Failed to allocate memory for peer->name->data");
+		ngx_destroy_pool(pool);
+		XSRETURN_UNDEF;
+	}
+	ngx_memcpy(peer->name->data, address, peer->name->len); 
 
 	rc = ngx_event_connect_peer(peer);
 	if (rc == NGX_ERROR || rc == NGX_BUSY || rc == NGX_DECLINED) {
-		sv_setiv(cb->args[1], 1); /* $error = 1 */
+
+		sv_setiv(cb->args[1], -1); 
+		sv_setpv(cb->args[1], "Connection failed");
+		SvIOK_on(cb->args[1]);
+
 		ngxe_callback(cb, 1);
 
 		if (peer->connection) {
@@ -755,7 +848,11 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 
 	c = peer->connection;
 	if (c == NULL) {
-		sv_setiv(cb->args[1], 1); /* $error = 1 */
+
+		sv_setiv(cb->args[1], -1); 
+		sv_setpv(cb->args[1], "Connection error");
+		SvIOK_on(cb->args[1]);
+
 		ngxe_callback(cb, 1);
 
 		ngx_destroy_pool(pool);
@@ -770,7 +867,11 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 
         s = ngx_pcalloc(c->pool, sizeof(ngxe_session_t));
 	if (s == NULL) {
-		sv_setiv(cb->args[1], 1); /* $error = 1 */
+
+		sv_setiv(cb->args[1], -1); 
+		sv_setpv(cb->args[1], "Cannot allocate memory for session");
+		SvIOK_on(cb->args[1]);
+
 		ngxe_callback(cb, 1);
 
 		ngxe_close(c);
@@ -792,6 +893,14 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 
     OUTPUT:
 	RETVAL
+
+
+
+
+
+
+
+
 
 
 
@@ -830,6 +939,10 @@ ngxe_server(address, port, sub, ...)
 	c = ngxe_server_create((ngx_cycle_t *) ngx_cycle, inaddr, 
 							(in_port_t )port);
 
+	if (c == NULL) {
+	    warn("ngxe_server_create() failed");
+	    XSRETURN_UNDEF;
+	}
 
 	cb = ngx_pcalloc(c->pool, sizeof(ngxe_callback_t));
 	if (cb == NULL) {

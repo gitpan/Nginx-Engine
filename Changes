@@ -11,3 +11,16 @@ Revision history for Perl extension Nginx::Engine.
 	- added initialization flag check in every XS function;
 	- ngxe_init requires only single argument now, allocating
 	  512 connections by default, old syntax is still supported
+
+0.03  Sat Jan  1 22:22:19 2011
+	- START argument in both reader and writer is changed to FLAGS;
+	  NGXE_START is a flag for automatic start;
+	- reader and writer are more smart now and can start and stop
+	  depending on the write buffer;
+	- added dual calls to stop and start reader and writer in 
+	  a single perl -> xsub call but might not be needed anymore;
+	- a few automated tests for basic functionality;
+	- bugfix: failed connect to localhost was crashing, required 
+	  peer->name to log an error, which was not used at all;
+	- fix: ngxe_server was not returning an error if port was already
+	  taken;

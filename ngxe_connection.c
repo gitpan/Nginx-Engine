@@ -68,13 +68,15 @@ ngxe_reader_handler(ngx_event_t *ev)
 		    "ngxe_reader_handler() called");
 */
 
+RECVAGAIN:
 
     buf = (u_char *) SvPV_nolen(svbuf);
     cur = SvCUR(svbuf);
     len = SvLEN(svbuf);
 
     if (len - cur - 1 < 4096) {
-        SvGROW(svbuf, cur + 16384 + 1); 
+        SvGROW(svbuf, len + 16384 + 1 - 16); 
+	cur = SvCUR(svbuf);
         len = SvLEN(svbuf);
     }
 
@@ -110,13 +112,14 @@ ngxe_reader_handler(ngx_event_t *ev)
     if (n > 0) {
 	SvCUR_set(svbuf, cur + n);
 
-	if (c->read->timer_set) {
-	    ngx_del_timer(c->read);
-	}
 /*
 	ngx_log_error(NGX_LOG_NOTICE, c->log, 0, 
 			"ngxe_reader_handler(): n = %ui", n);
 */
+
+	if (c->read->timer_set) {
+	    ngx_del_timer(c->read);
+	}
 
 	if (!c->read->timer_set && s->reader_timeout) {
 	    ngx_add_timer(c->read, s->reader_timeout);
@@ -133,32 +136,30 @@ ngxe_reader_handler(ngx_event_t *ev)
 	    ngxe_close(c);
 	    return;
 	}
-
-
-
     }
 
     if (n == NGX_AGAIN) {
-        if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
-
-	    sv_setiv(cb->args[1], -2); 
-	    sv_setpv(cb->args[1], "Event error");
-	    SvIOK_on(cb->args[1]);
-
-	    ngxe_callback(cb, 1);
-
-	    ngxe_close(c);
-            return;
-        }
-
         return;
     }
 
     ngxe_callback(cb, 0);
 
+    if (!c->destroyed) {
+
+	if (s->writer_callback != NULL && s->writer_buffer != NULL &&
+	    SvCUR(s->writer_buffer) > 0) 
+	{
+
+	    ngxe_reader_stop(c);
+	    ngxe_writer_start(c);
+
+	} else if (c->read->ready) {
+
+	    goto RECVAGAIN;
+	}
+    }
 
     return;
-
 }
 
 
@@ -195,10 +196,11 @@ ngxe_reader_start(ngx_connection_t *c)
 	return;
     }
 
+/*
     if (c->read->ready) {
 	c->read->handler(c->read);
     }
-    
+*/    
     return;
 }
 
@@ -262,6 +264,7 @@ ngxe_writer_handler(ngx_event_t *ev)
 	return;
     }
 
+
     if (ev->timedout) {
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
 
@@ -277,10 +280,7 @@ ngxe_writer_handler(ngx_event_t *ev)
 	return;
     }
 
-
-    buf = (u_char *) SvPV_nolen(svbuf);
     cur = SvCUR(svbuf);
-
 
     /* no data in buffer to send */ 
     if (cur == 0) {
@@ -290,15 +290,13 @@ ngxe_writer_handler(ngx_event_t *ev)
 	}
 
 	ngxe_callback(cb, 0);
-	return;
+
+	goto AFTERCALLBACK;
     }
 
+SENDAGAIN:
 
-
-/*
-    ngx_log_error(NGX_LOG_NOTICE, c->log, 0, 
-	"buf = %p, cur = %i, len = %i", buf, cur, SvLEN(svbuf));
-*/
+    buf = (u_char *) SvPV_nolen(svbuf);
 
     n = c->send(c, buf, cur);
 
@@ -315,6 +313,7 @@ ngxe_writer_handler(ngx_event_t *ev)
     }
 
     if (n > 0) {
+
 	sv_chop(svbuf, (char *)buf + n);
 
 	buf = (u_char *) SvPV_nolen(svbuf);
@@ -324,17 +323,14 @@ ngxe_writer_handler(ngx_event_t *ev)
 	    ngx_del_timer(c->write);
 	}
 
-/*
-	ngx_log_error(NGX_LOG_NOTICE, c->log, 0, 
-	    "n = %i, buf = %p, cur = %i, len = %i", n, buf, cur, SvLEN(svbuf));
-*/
 	if (cur > 0) {
-	    /* force to process event again */
-	    /* c->write->ready = 0; */ /* TODO remove this */
 
-	    if (!c->write->timer_set && s->writer_timeout) {
-		ngx_add_timer(c->write, s->writer_timeout);
+	    c->write->ready = 0;
+/*
+	    if (c->write->ready) {
+		goto SENDAGAIN;
 	    }
+*/
 
             if (ngx_handle_write_event(c->write, 0) != NGX_OK) {
 
@@ -347,17 +343,19 @@ ngxe_writer_handler(ngx_event_t *ev)
 		ngxe_close(c);
 		return;
 	    }
+
 	    return;
+
 	} else if (cur == 0) {
+
 	    SvOOK_off(svbuf);
 	    SvCUR_set(svbuf, 0);
 	}
-
     }
 
     if (n == NGX_AGAIN) {
 
-        if (ngx_handle_write_event(c->write, 0) != NGX_OK) {
+	if (ngx_handle_write_event(c->write, 0) != NGX_OK) {
 
 	    sv_setiv(cb->args[1], -2); 
 	    sv_setpv(cb->args[1], "Event error");
@@ -366,13 +364,65 @@ ngxe_writer_handler(ngx_event_t *ev)
 	    ngxe_callback(cb, 1);
 
 	    ngxe_close(c);
-            return;
-        }
+	    return;
+	}
+
+	if (c->write->ready) {
+	    goto SENDAGAIN;
+	}
 
         return;
     }
 
     ngxe_callback(cb, 0);
+
+AFTERCALLBACK:
+
+    /* ngxe_closed was not called() */
+    if (!c->destroyed) {
+
+	cur = SvCUR(svbuf);
+
+	if (cur > 0) {
+
+	    if (c->write->ready) {
+		goto SENDAGAIN;
+	    }
+
+	    if (!c->write->timer_set && s->writer_timeout) {
+		ngx_add_timer(c->write, s->writer_timeout);
+	    }
+
+	    if (ngx_handle_write_event(c->write, 0) != NGX_OK) {
+
+		sv_setiv(cb->args[1], -2); 
+		sv_setpv(cb->args[1], "Event error");
+		SvIOK_on(cb->args[1]);
+
+		ngxe_callback(cb, 1);
+
+		ngxe_close(c);
+		return;
+	    }
+
+	} else {
+
+	    /* restarting reader if no data has been added to the 
+	       writer's buffer and connection was not destroyed.  
+	       You kind of have to choose to either add new data
+	       to the buffer and continue sending it or do nothing
+	       and restart the reader. Or you can just close connection
+	       and be free.
+	       */
+
+	    if (s->reader_callback != NULL && s->reader_buffer != NULL) {
+
+                ngxe_writer_stop(c);
+		ngxe_reader_start(c);
+	    }
+	}
+    }
+
     return;
 }
 
@@ -392,7 +442,7 @@ ngxe_writer_start(ngx_connection_t *c)
     }
 
     s = (ngxe_session_t *) c->data;
-    cb = s->reader_callback;
+    cb = s->writer_callback;
 
     c->write->handler = ngxe_writer_handler;
 
@@ -413,7 +463,7 @@ ngxe_writer_start(ngx_connection_t *c)
     }
 
     if (c->write->ready) {
-	c->write->handler(c->write);
+	c->write->handler(c->write); 
     }
     
     return;
@@ -511,7 +561,9 @@ ngxe_client_init_handler(ngx_event_t *ev)
 
 	c->timedout = 1;
 
-	sv_setiv(cb->args[1], 1); /* $error = 1 */
+	sv_setiv(cb->args[1], -1); 
+	sv_setpv(cb->args[1], "Operation timed out");
+	SvIOK_on(cb->args[1]);
 	ngxe_callback(cb, 1);
 
 	ngxe_close(c);
@@ -591,6 +643,14 @@ ngxe_create_peer(ngx_pool_t *pool, in_addr_t bindaddr, in_addr_t addr,
     peer->get = ngx_event_get_peer;
     peer->log = log;
     peer->log_error = NGX_ERROR_ERR;
+
+    peer->name = ngx_pcalloc(pool, sizeof(ngx_str_t));
+    if (peer->name == NULL) {
+	ngx_log_error(NGX_LOG_ERR, log, 0, 
+			"peer->name = ngx_pcalloc(pool, sizeof(ngx_str_t *)); "
+			"failed");
+	return NULL;
+    }
 
     return peer;
 }

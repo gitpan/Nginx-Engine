@@ -1,15 +1,7 @@
 
 Performance:
 
-  - ngxe_reader_stop_writer_start() and ngxe_reader_start_writer_stop()
-    to avoid unnecessary perl->xsub call
-
-  - create another type of caller to avoid unnecessary perl->xsub
-    calls, ngxe_reader_server() or something that handles reads and 
-    switches to the writer after return if there is some data in
-    the output buffer and than switches back and awaits for new 
-    data in the read buffer, kind of reader's point of control
-    and maybe do the same with the writer's point of control 
+  - use FLAGS to accelerate required behaviours (parsing HTTP, etc.)
 
 General:
 
@@ -19,7 +11,7 @@ General:
 
   - ngxe_http_server()
 
-  - ngxe_resolve()
+  - ngxe_resolver()
 
 
 Someday:

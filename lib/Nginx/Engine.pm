@@ -1,18 +1,16 @@
 package Nginx::Engine;
 
-use 5.008008;
+# use 5.008008;
 use strict;
 use warnings;
+
+use constant {
+    NGXE_START => 0x01
+};
 
 require Exporter;
 
 our @ISA = qw(Exporter);
-
-our %EXPORT_TAGS = ( 'all' => [ qw(
-	
-) ] );
-
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw(
 
@@ -31,19 +29,25 @@ our @EXPORT = qw(
     ngxe_reader
     ngxe_reader_start
     ngxe_reader_stop
+    ngxe_reader_stop_writer_start
     ngxe_reader_timeout
 
     ngxe_writer
     ngxe_writer_start
     ngxe_writer_stop
+    ngxe_writer_stop_reader_start
     ngxe_writer_timeout
+    ngxe_writer_buffer_set
 
     ngxe_close
 
     ngxe_loop
+
+    NGXE_START
+
 );
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 require XSLoader;
 XSLoader::load('Nginx::Engine', $VERSION);
@@ -78,16 +82,24 @@ Nginx::Engine - Asynchronous framework based on nginx
     });
 
     # Server that reads whatever comes first
-    # sends it back and closes connection. 
+    # sends it back and closes connection.  
+    # 
     ngxe_server('*', 55555, sub {
-        ngxe_reader($_[0], 1, 5000, sub {
+        ngxe_writer)$_[0], 0, 5000, '', sub {
             return if $_[1];
 
-            ngxe_writer)$_[0], 1, 5000, $_[2], sub {
-                return if $_[1];
+            ngxe_close($_[0]);
+        });
 
-                ngxe_close($_[0]);
-            });
+        ngxe_reader($_[0], NGXE_START, 5000, sub {
+            return if $_[1];
+
+            $_[3] = $_[2]; # write_buffer = read_buffer 
+            #_[2] = '';    # read_buffer = ''
+            
+            # writer starts automatically if there is 
+            # data in the write buffer after this sub
+            # returns
         });
     });
 
@@ -116,26 +128,28 @@ Nginx::Engine - Asynchronous framework based on nginx
 
     # Server that echoes everyhing back to the client.
     ngxe_server('*', 55555, sub {
-        ngxe_reader($_[0], 1, 5000, sub {
-            return if $_[1];
-
-            $_[3] = $_[2]; # copying read buffer to the write buffer
-            $_[2] = '';    # clearing read buffer
-
-            # to writer
-            ngxe_reader_stop($_[0]);
-            ngxe_writer_start($_[0]);
-        });
 
         ngxe_writer($_[0], 0, 5000, '', sub {
             return if $_[1];
 
             # write buffer sent and cleared for us 
 
-            # back to reader
-            ngxe_writer_stop($_[0]);
-            ngxe_reader_start($_[0]);
+            # writer stops automatically if there is
+            # no data in the write buffer after this sub
+            # returns
         });
+
+        ngxe_reader($_[0], NGXE_START, 5000, sub {
+            return if $_[1];
+
+            $_[3] = $_[2]; # copying read buffer to the write buffer
+            $_[2] = '';    # clearing read buffer
+
+            # writer starts automatically if there is 
+            # data in the write buffer after this sub
+            # returns
+        });
+
     });
 
     ngxe_loop;
@@ -145,22 +159,27 @@ Nginx::Engine - Asynchronous framework based on nginx
 
 Nginx::Engine is a simple high-performance asynchronous networking framework.
 It's intended to bring nodejs-like performance and nginx's stability 
-into Perl. 
+into Perl. It's almost as fast as nginx itself. And it can easily handle 
+thousands or even tens of thousands of concurrent connections. Well, 
+just like nginx. 
 
-The main difference from other frameworks is a little bit higher level 
-of abstraction. There are no descriptors nor sockets, everything works 
-with connections instead. Internally connection is just a pointer to the 
-ngx_connection_t structure. So it is as fast as it can possibly be. 
+Internally it initializes nginx to access event loop, event modules and 
+a lot of other core functions nginx provides. For every connection
+Engine allocates a memory pool and destroys it whenever connection
+is closed. Engine registers a cleanup function for stored perl arguments 
+and callbacks to decrease their reference count with the destruction
+of the memory pool. This way memory leaks are not possible even though 
+two different memory allocators are used.
 
-Performance of the engine is one thing you might want to verify yourself. 
-I did some benchmarking with F<ab> and as it turns out simple http server 
-from F<examples/> directory outperforms similar example of nodejs by 30%.
+=head1 DEPENDENCIES
+
+No dependencies. Everything comes with the module.
 
 =head1 SUPPORTED OPERATING SYSTEMS
 
 Any unix or linux with working gcc, sh, perl and nginx should be ok.
 It mostly depends on the ability to build nginx in a way that it can be 
-linked with as a shared library. If there is a problem you can
+linked as a shared library. If there is a problem you can
 build nginx manually. Configure it without http module and with compiler 
 option, that allows it to be linked as a shared library (not required for 
 gcc on x86 and -fPIC for gcc on amd64). 
@@ -192,16 +211,21 @@ The following functions are exported by default:
     ngxe_reader
     ngxe_reader_start
     ngxe_reader_stop
+    ngxe_reader_stop_writer_start
     ngxe_reader_timeout
 
     ngxe_writer
     ngxe_writer_start
     ngxe_writer_stop
+    ngxe_writer_stop_reader_start
     ngxe_writer_timeout
+    ngxe_writer_buffer_set
 
     ngxe_close
 
     ngxe_loop
+
+    NGXE_START
 
 =head1 INITIALIZATION
 
@@ -240,7 +264,6 @@ all those extra arguments you set.
 
     $_[0] - timer
     @_[1..$#_] - extra args
-
 
 For example, here is how to say "Hello, World" in 5 seconds, where "World" 
 is an extra argument:
@@ -314,7 +337,7 @@ Creates new client connection, binds to the I<BIND_ADDR>, connects
 to the I<REMOTE_ADDR>:I<REMOTE_PORT>. And tries to do all of it in 
 I<TIMEOUT> ms. Executes I<CALLBACK> after with any extra arguments.
 
-Returns connection identifier.
+Returns connection.
 
 First argument passed to the callback is connection identifier, second - 
 error variable and the rest are extra arguments.
@@ -343,28 +366,36 @@ Notice, we are returning from callback on error. This is required behaviour.
 =head1 READER AND WRITER
 
 Reader is a way to receive data from connection asynchronously. 
-It executes callback every time new data arrived. You should do 
+It executes callback every time new data arrives. You should do 
 whatever you need with read buffer and clear it afterwards to 
-avoid too much memory consumption.
+avoid too much memory consumption. If you put some data into the
+write buffer it will stop the reader and start the writer after.
 
 Writer is a bit different and it will execute a callback only
-when entire write buffer has been send. Writer clears write 
+when entire write buffer has been sent. Writer clears write 
 buffer for you. You can modify it inside the callback and 
 writer will send it again. You can achieve streaming this way.
+Writer is automatically stops itself and starts the reader 
+if write buffer is empty after the callback;
 
 Read and write buffers can be used in both reader and writer.
+You can save reference to the read C<\$_[2]> or write 
+buffer C<\$_[3]> if you want to access them later. Or you can
+use C<ngxe_writer_buffer_set(CONNECTION, DATA)> to put something
+into the write buffer if you have a connection already saved.
 
 And both reader and writer can be recreated to achieve different 
-processing schemes.
+processing schemes and if you prepared to loose some of the 
+performance. 
 
-=head2 ngxe_reader(CONN, START, TIMEOUT, CALLBACK, ...)
+=head2 ngxe_reader(CONN, FLAGS, TIMEOUT, CALLBACK, ...)
 
 Creates a reader for connection identified as I<CONN>. Starts it
-immediately if I<START> is 1. If no data has been received in I<TIMEOUT> ms
-executes I<CALLBACK> with error flag set to timeout. Extra args can be
-placed after I<CALLBACK>, as usual. 
+immediately if NGXE_START is given as a flag. If no data has been 
+received in I<TIMEOUT> ms executes I<CALLBACK> with error identifier 
+set to timeout. Extra args can be placed after I<CALLBACK>, as usual. 
 
-If I<TIMEOUT> is set 0 it's not going to be used. This feature added in 0.02.
+If I<TIMEOUT> is set to 0 it is not going to be used at all.
 
 Returns undef on error.
 
@@ -378,13 +409,13 @@ Second is error.variable. Third and 4th are read and write buffers.
     @_[4..$#_] - extra args
 
 If error is set you must return from the subroutine avoiding any
-ngxe_* calls on current connection identifier $_[0].
+ngxe_* calls on current connection C<$_[0]>.
 
 For example, let's create server, read a few bytes from new connection
 and close it:
 
     ngxe_server('*', 55555, sub {
-        ngxe_reader($_[0], 1, 1000, sub {
+        ngxe_reader($_[0], NGXE_START, 1000, sub {
             if ($_[1]) {
                 return;
             }
@@ -396,25 +427,31 @@ and close it:
 
 =head2 ngxe_reader_start(CONN)
 
-Starts reader for I<CONN>. 
+Starts reader for connection I<CONN>. 
 
 =head2 ngxe_reader_stop(CONN)
 
-Stops reader for I<CONN>.
+Stops reader for connection I<CONN>.
+
+=head2 ngxe_reader_stop_writer_start(CONN)
+
+Stops reader and starts writer for connection I<CONN>. 
+Saves unnecessary perl --> XSUB --> perl transition.
 
 =head2 ngxe_reader_timeout(CONN[, TIMEOUT])
 
 Returns current timeout for the reader and sets it to I<TIMEOUT> 
 if specified.
 
-=head2 ngxe_writer(CONN, START, TIMEOUT, DATA, CALLBACK, ...)
+=head2 ngxe_writer(CONN, FLAGS, TIMEOUT, DATA, CALLBACK, ...)
 
 Creates a writer for connection identified as I<CONN>. Starts it
-immediately if I<START> is 1. If no data has been send in I<TIMEOUT> ms
-executes I<CALLBACK> with error flag set to timeout. Extra args can be
-placed after I<CALLBACK>, as usual. Puts I<DATA> into the write buffer.
+immediately if NGXE_START is given as a flag. If no data has been send 
+in I<TIMEOUT> ms executes I<CALLBACK> with error flag set to timeout. 
+Extra args can be placed after I<CALLBACK>, as usual. Puts I<DATA> into 
+the write buffer.
 
-If I<TIMEOUT> is set 0 it's not going to be used. This feature added in 0.02.
+If I<TIMEOUT> is set to 0 timeout is not going to be used at all. 
 
 Returns undef on error.
 
@@ -428,13 +465,13 @@ Second is error.variable. Third and 4th are read and write buffers.
     @_[4..$#_] - extra args
 
 If error is set you must return from the subroutine avoiding any
-ngxe_* calls on current connection identifier C<$_[0]>.
+ngxe_* calls on current connection C<$_[0]>.
 
 For example, let's create server, send a few bytes to new connection
 and close it:
 
     ngxe_server('*', 55555, sub {
-        ngxe_writer($_[0], 1, 1000, "hi", sub {
+        ngxe_writer($_[0], NGXE_START, 1000, "hi", sub {
             if ($_[1]) {
                 return;
             }
@@ -446,16 +483,26 @@ and close it:
 
 =head2 ngxe_writer_start(CONN)
 
-Starts writer for I<CONN>. 
+Starts writer for connection I<CONN>. 
 
 =head2 ngxe_writer_stop(CONN)
 
-Stops writer for I<CONN>
+Stops writer for connection I<CONN>
+
+=head2 ngxe_writer_stop_reader_start(CONN)
+
+Stops writer and starts reader for connection I<CONN>. 
+Saves unnecessary perl --> XSUB --> perl transition.
 
 =head2 ngxe_writer_timeout(CONN[, TIMEOUT])
 
 Returns current timeout for the writer and sets it to I<TIMEOUT> 
 if specified.
+
+=head2 ngxe_writer_buffer_set(CONN, DATA)
+
+iPuts I<DATA>.into the write buffer of the connection I<CONN>
+replacing any existing data.
 
 =head1 CLOSE
 
@@ -464,21 +511,26 @@ if specified.
 Destroys reader, writer, closes socket and removes connection
 from the loop.
 
+=head1 EXAMPLES
+
+There are quite a few examples in the F<examples/> directory.
+
 =head1 EXAMPLE: ECHO SERVER
 
 A bit more complex example involving manipulation with the buffers.
 
     use Nginx::Engine;
 
-    ngxe_init("", 64),
+    ngxe_init("", 64);
 
     ngxe_server("*", 55555, sub {
+
         ngxe_reader($_[0], 0, 5000, sub { 
 
-            # $_[0] - connection identifier
-            # $_[1] - error condition
-            # $_[2] - recv buffer
-            # $_[3] - send buffer
+            # $_[0] - connection
+            # $_[1] - error indicator
+            # $_[2] - read buffer
+            # $_[3] - write buffer
             # @_[4..$#_] -- args, but we didn't set any
 
             if ($_[1]) {
@@ -491,26 +543,26 @@ A bit more complex example involving manipulation with the buffers.
             # clearing read buffer
             $_[2] = '';
 
-            # switching to writer
-            ngxe_reader_stop($_[0]);
-            ngxe_writer_start($_[0]);
+            # calls ngxe_reader_stop_writer_start if write
+            # buffers is not empty
+
         });
 
         ngxe_writer($_[0], 0, 1000, "", sub {
 
-            # $_[0] - connection identifier
-            # $_[1] - error condition
-            # $_[2] - recv buffer
-            # $_[3] - send buffer
+            # $_[0] - connection
+            # $_[1] - error indicator
+            # $_[2] - read buffer
+            # $_[3] - write buffer
             # @_[4..$#_] -- args, but we didn't set any
 
             if ($_[1]) {
                 return;
             }
 
-            # switching back to reader
-            ngxe_writer_stop($_[0]);
-            ngxe_reader_start($_[0]);
+            # calls ngxe_writer_stop_reader_start if there is no
+            # more data in the buffer
+
         });
 
         ngxe_reader_start($_[0]);
