@@ -1,4 +1,5 @@
 .hgignore
+.hgtags
 Changes
 Engine.xs
 LICENSE
@@ -8,12 +9,20 @@ META.yml
 Makefile.PL
 README
 TODO
+examples/cooked-one.pl
+examples/echo-server.pl
+examples/http-client.pl
+examples/http-server-with-parser-xs.pl
 examples/http-server.pl
+examples/keepalive-client.pl
+examples/resolver.pl
+examples/stateful-echo-server.pl
+examples/streaming.pl
 lib/Nginx/Engine.pm
+lib/Nginx/Engine/Cookies/Resolver.pm
 nginx/CHANGES
 nginx/CHANGES.ru
 nginx/LICENSE
-nginx/README
 nginx/auto/cc/acc
 nginx/auto/cc/bcc
 nginx/auto/cc/ccc
@@ -99,13 +108,10 @@ nginx/conf/scgi_params
 nginx/conf/uwsgi_params
 nginx/conf/win-utf
 nginx/configure
-nginx/contrib/README
 nginx/contrib/geo2nginx.pl
 nginx/contrib/unicode2nginx/koi-utf
 nginx/contrib/unicode2nginx/unicode-to-nginx.pl
 nginx/contrib/unicode2nginx/win-utf
-nginx/html/50x.html
-nginx/html/index.html
 nginx/src/core/nginx.c
 nginx/src/core/nginx.h
 nginx/src/core/ngx_array.c
@@ -233,7 +239,6 @@ nginx/src/http/modules/ngx_http_userid_filter_module.c
 nginx/src/http/modules/ngx_http_uwsgi_module.c
 nginx/src/http/modules/ngx_http_xslt_filter_module.c
 nginx/src/http/modules/perl/Makefile.PL
-nginx/src/http/modules/perl/nginx.pm
 nginx/src/http/modules/perl/nginx.xs
 nginx/src/http/modules/perl/ngx_http_perl_module.c
 nginx/src/http/modules/perl/ngx_http_perl_module.h
@@ -362,4 +367,6 @@ ngxe_timer.h
 ngxe_xs.c
 ngxe_xs.h
 ppport.h
-t/Nginx-Engine.t
+t/00-Nginx-Engine.t
+t/01-Nginx-Engine-timers.t
+t/02-Nginx-Engine-server-client.t

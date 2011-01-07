@@ -39,12 +39,13 @@ ngxe_client('*', $addr, 80, 5000, sub {
                 }
             }
 
+            exit;
             return;
         }
 
     });
 
-    ngxe_writer($_[0], NGXE_START, 1000, $request, sub {
+    ngxe_writer($_[0], NGXE_START, 5000, $request, sub {
         if ($_[1]) {
             return;
         }

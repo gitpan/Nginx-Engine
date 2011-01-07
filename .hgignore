@@ -14,3 +14,8 @@ tmp/.+
 ^nginx/objs/
 ^nginx/Makefile
 ^Makefile$
+nginx/README$
+nginx/contrib/README$
+nginx/html/50x.html$
+nginx/html/index.html$
+nginx/src/http/modules/perl/nginx.pm$

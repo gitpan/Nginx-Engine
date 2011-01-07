@@ -1,6 +1,6 @@
 Revision history for Perl extension Nginx::Engine.
 
-0.01  Wed Dec 15 03:01:23 2010
+0.01  Wed Dec 15 03:01:23 2010 GMT +0200
 	- original version; created by h2xs 1.23 with options
 		-A -n Nginx::Engine
 
@@ -12,7 +12,7 @@ Revision history for Perl extension Nginx::Engine.
 	- ngxe_init requires only single argument now, allocating
 	  512 connections by default, old syntax is still supported
 
-0.03  Sat Jan  1 22:22:19 2011
+0.03  Sat Jan  1 22:22:19 2011 GMT
 	- START argument in both reader and writer is changed to FLAGS;
 	  NGXE_START is a flag for automatic start;
 	- reader and writer are more smart now and can start and stop
@@ -24,3 +24,31 @@ Revision history for Perl extension Nginx::Engine.
 	  peer->name to log an error, which was not used at all;
 	- fix: ngxe_server was not returning an error if port was already
 	  taken;
+
+0.04   GMT
+	- added $_[4] to the reader's callback to control the amount of
+	  data to be read, might be useful for a lot of protocols and
+	  very benefitial for performance;
+	- added a few examples showing how to do more complex things:
+	  keepalive-client, resolver;
+	- added Nginx::Engine::Cookies to implement some common things
+	  on top of the Nginx::Engine;
+	- added Nginx::Engine::Cookies::Resolver as a ready to use
+	  implementation of a simple tcp resolver on top of Net::DNS;
+	- removed nginx.pm and a few other files from nginx distribution
+	  to prevent from showing up on CPAN;
+	- fixed: was failing to build on Mac OS X, thanks to 
+	  Tatsuhiko Miyagawa;
+	Internals:
+	- making sure not to reschedule just stopped callback by checking
+	  c->read->handler and c->write->handler;
+	- bugfix: ngxe_client needed read handler as well as write handler 
+	  to avoid crashing on connect to closed port on some systems;
+	- calling ngx_handle_read_event() after each callback 
+	  in the reader to make sure that the c->read->ready is set;
+	- dummy handlers on newly accepted connection;
+	- call back on ev->error in client's handler;
+	- reader and writer start with a dummy handlers for itself 
+	  and only use real ones with NGXE_START flag set
+	- timer resets every time *_start is called;
+

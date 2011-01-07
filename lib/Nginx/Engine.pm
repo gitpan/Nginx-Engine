@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 use constant {
-    NGXE_START => 0x01
+    NGXE_START  => 0x01,
 };
 
 require Exporter;
@@ -47,7 +47,7 @@ our @EXPORT = qw(
 
 );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 require XSLoader;
 XSLoader::load('Nginx::Engine', $VERSION);
@@ -169,7 +169,7 @@ Engine allocates a memory pool and destroys it whenever connection
 is closed. Engine registers a cleanup function for stored perl arguments 
 and callbacks to decrease their reference count with the destruction
 of the memory pool. This way memory leaks are not possible even though 
-two different memory allocators are used.
+two different memory allocators are used. 
 
 =head1 DEPENDENCIES
 
@@ -184,13 +184,7 @@ build nginx manually. Configure it without http module and with compiler
 option, that allows it to be linked as a shared library (not required for 
 gcc on x86 and -fPIC for gcc on amd64). 
 
-Tested on: 
-
-    FreeBSD 6.4 i386
-    FreeBSD 8.0 i386
-    Fedora Linux 2.6.33.6-147.fc13.i686.PAE
-    Fedora Linux 2.6.18-128.2.1.el5.028stab064.7
-    Linux cono-desktop 2.6.35-24-generic #42-Ubuntu SMP x86_64
+Tested on FreeBSD, Linux, NetBSD, Solaris and a few OpenBSD releases. 
 
 =head1 EXPORT
 
@@ -367,26 +361,33 @@ Notice, we are returning from callback on error. This is required behaviour.
 
 Reader is a way to receive data from connection asynchronously. 
 It executes callback every time new data arrives. You should do 
-whatever you need with read buffer and clear it afterwards to 
+whatever you need with the read buffer and clear it afterwards to 
 avoid too much memory consumption. If you put some data into the
 write buffer it will stop the reader and start the writer after.
+You can call C<ngxe_reader_stop($_[0])> if you need to do 
+something else before you can actually respond to the client.
 
 Writer is a bit different and it will execute a callback only
 when entire write buffer has been sent. Writer clears write 
 buffer for you. You can modify it inside the callback and 
 writer will send it again. You can achieve streaming this way.
 Writer is automatically stops itself and starts the reader 
-if write buffer is empty after the callback;
+if write buffer is empty after the callback; You can call
+C<ngxe_writer_stop($_[0])> if you need to deal with the 
+connection later.
+
+It doen't seem very clear and structured but speed is more
+important here.
 
 Read and write buffers can be used in both reader and writer.
-You can save reference to the read C<\$_[2]> or write 
+You can save references to the read C<\$_[2]> or write 
 buffer C<\$_[3]> if you want to access them later. Or you can
 use C<ngxe_writer_buffer_set(CONNECTION, DATA)> to put something
-into the write buffer if you have a connection already saved.
+into the write buffer if you have a connection already stored 
+somewhere.
 
 And both reader and writer can be recreated to achieve different 
-processing schemes and if you prepared to loose some of the 
-performance. 
+processing schemes and if you can afford to slow things down.
 
 =head2 ngxe_reader(CONN, FLAGS, TIMEOUT, CALLBACK, ...)
 
@@ -401,12 +402,15 @@ Returns undef on error.
 
 First argument paseed to the callback is connection identifier. 
 Second is error.variable. Third and 4th are read and write buffers.
+And the fifth argument is an amount of data required for callback.
+Usefule to read data with known length.
 
     $_[0] - connection
     $_[1] - error indicator
     $_[2] - read buffer
     $_[3] - write buffer
-    @_[4..$#_] - extra args
+    $_[4] - min length
+    @_[5..$#_] - extra args
 
 If error is set you must return from the subroutine avoiding any
 ngxe_* calls on current connection C<$_[0]>.
@@ -501,8 +505,8 @@ if specified.
 
 =head2 ngxe_writer_buffer_set(CONN, DATA)
 
-iPuts I<DATA>.into the write buffer of the connection I<CONN>
-replacing any existing data.
+Puts I<DATA>.into the write buffer of the connection I<CONN>
+replacing old data. Calls C<ngxe_writer_start()> afterwards.
 
 =head1 CLOSE
 
@@ -531,7 +535,8 @@ A bit more complex example involving manipulation with the buffers.
             # $_[1] - error indicator
             # $_[2] - read buffer
             # $_[3] - write buffer
-            # @_[4..$#_] -- args, but we didn't set any
+            # $_[4] - min length
+            # @_[5..$#_] -- args, but we didn't set any
 
             if ($_[1]) {
                 return;

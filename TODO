@@ -1,20 +1,28 @@
 
+Cookies
+
+  - message passing 
+  - http web request processing
+  - ...
+
 Performance:
 
-  - use FLAGS to accelerate required behaviours (parsing HTTP, etc.)
+  - use FLAGS to accelerate desired behaviours (parsing HTTP, etc.)
 
 General:
+
+  - example: query remote machine within http server
 
   - improve documentation
 
   - consider cleanup callbacks instead of return on error
 
-  - ngxe_http_server()
-
   - ngxe_resolver()
 
 
 Someday:
+
+  - ngxe_http_server()
 
   - rewrite nginx ./configure scripts to use MakeMaker and to be able 
     to build nginx on windows and other platforms along with the 

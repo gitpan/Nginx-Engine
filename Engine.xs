@@ -1,6 +1,8 @@
 
 #include <ngxe.h>
 
+static int ngxe_initialized;
+
 MODULE = Nginx::Engine		PACKAGE = Nginx::Engine		
 
 
@@ -244,7 +246,7 @@ ngxe_reader(connection, start, timeout, sub, ...)
 	/* creating perl callback */
 
 	args_offset = 4;
-	args_extra  = 4;
+	args_extra  = 5;
 
 	cb->handler = sv_2mortal(newSVsv(sub));
 	SvREFCNT_inc(cb->handler); 
@@ -291,6 +293,11 @@ ngxe_reader(connection, start, timeout, sub, ...)
 		SvREFCNT_inc(cb->args[3]);
 	}
 
+	/* $min_len */
+	cb->args[4] = sv_2mortal(newSViv(0));
+	SvREFCNT_inc(cb->args[4]);
+	SvIOK_only(cb->args[4]);
+
 	/* ... */
 	for (i = args_extra; i < cb->args_n; i++) {
 		cb->args[i] = sv_2mortal(newSVsv(ST(i + args_offset - 
@@ -300,12 +307,14 @@ ngxe_reader(connection, start, timeout, sub, ...)
 
 	/* */
 
+	s->reader_flags = start;
+
 	s->reader_callback = cb;
 	s->reader_timeout = timeout;
 
-	c->read->handler = ngxe_reader_handler;
+	c->read->handler = ngxe_dummy_handler;
 
-	if (start) {
+	if (start & NGXE_START) {
 		ngxe_reader_start(c);
 	}
 
@@ -618,9 +627,9 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 	s->writer_callback = cb;
 	s->writer_timeout = timeout;
 
-	c->write->handler = ngxe_writer_handler;
+	c->write->handler = ngxe_dummy_handler;
 
-	if (start) {
+	if (start & NGXE_START) {
 		ngxe_writer_start(c);
 	}
 
@@ -884,6 +893,7 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 	s->writer_timeout = timeout;
 
 	c->write->handler = ngxe_client_init_handler;
+	c->read->handler = ngxe_client_init_handler;
 
 	if (rc == NGX_OK) {
 		c->write->handler(c->write);

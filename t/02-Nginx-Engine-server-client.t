@@ -45,8 +45,8 @@ while ($port <= $port_max && !defined ngxe_server('127.0.0.1', $port, sub {
 
     ngxe_reader($_[0], 1, 1000, sub {
         pass "reader called back";
-        ok $_[4] == 30, "arg0 passed to the reader's callback";
-        ok $_[5] == 31, "arg1 passed to the reader's callback";
+        ok $_[5] == 30, "arg0 passed to the reader's callback";
+        ok $_[6] == 31, "arg1 passed to the reader's callback";
 
         if ($_[1]) {
             fail "Receiving data from the client without errors" or
@@ -83,13 +83,14 @@ ngxe_client('127.0.0.1', '127.0.0.1', $port, 1000, sub {
 
     pass "Connected to server";
 
-    ngxe_reader($_[0], 0, 1000, sub {
+    ngxe_reader($_[0], 0, 5000, sub {
         pass "reader called back";
-        ok $_[4] == 28, "arg0 passed to the reader's callback";
-        ok $_[5] == 29, "arg1 passed to the reader's callback";
+        ok $_[5] == 28, "arg0 passed to the reader's callback";
+        ok $_[6] == 29, "arg1 passed to the reader's callback";
 
         if ($_[1]) {
-            ok $_[2] eq 'hello', "Detecting closed connection by server";
+            ok $_[2] eq 'hello', "Detecting closed connection by server" 
+                or BAIL_OUT "buffer = '$_[2]'";
             exit;
             return;
         }
@@ -101,6 +102,7 @@ ngxe_client('127.0.0.1', '127.0.0.1', $port, 1000, sub {
             ok $_[2] eq 'hello', 
                         "Receiving response from the server without errors";
         } 
+
     }, 28, 29);
 
     ngxe_writer($_[0], NGXE_START, 1000, "hi\x0d\x0a", sub {

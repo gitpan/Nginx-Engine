@@ -10,6 +10,7 @@ typedef struct {
     ngxe_callback_t  *reader_callback;
     SV               *reader_buffer;
     int               reader_timeout;
+    int               reader_flags;
 
     /* writer */
     ngxe_callback_t  *writer_callback;
