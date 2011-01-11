@@ -832,7 +832,14 @@ ngxe_client(bind_address, address, port, timeout, sub, ...)
 	peer->name->len = inaddr_len;
 	peer->name->data = ngx_pnalloc(pool, peer->name->len);
 	if (peer->name->data == NULL) {
-		warn("Failed to allocate memory for peer->name->data");
+
+		sv_setiv(cb->args[1], -1); 
+		sv_setpv(cb->args[1], "Failed to allocate memory "
+		                      "for peer->name->data");
+		SvIOK_on(cb->args[1]);
+
+		ngxe_callback(cb, 1);
+
 		ngx_destroy_pool(pool);
 		XSRETURN_UNDEF;
 	}

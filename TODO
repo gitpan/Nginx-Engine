@@ -1,26 +1,16 @@
 
-Cookies
-
-  - message passing 
-  - http web request processing
-  - ...
-
-Performance:
-
-  - use FLAGS to accelerate desired behaviours (parsing HTTP, etc.)
-
-General:
-
-  - example: query remote machine within http server
-
-  - improve documentation
+  - describe naming, calling and error handling in the documentation,
+    like always issuing a warning if callback is not going to be called
+    on error and always passing error as the second argument, etc 
 
   - consider cleanup callbacks instead of return on error
 
-  - ngxe_resolver()
+  - use FLAGS to accelerate desired behaviours (parsing HTTP, etc.)
 
 
 Someday:
+
+  - ngxe_resolver()
 
   - ngxe_http_server()
 

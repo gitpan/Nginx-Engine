@@ -47,7 +47,7 @@ our @EXPORT = qw(
 
 );
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 require XSLoader;
 XSLoader::load('Nginx::Engine', $VERSION);
@@ -575,6 +575,11 @@ A bit more complex example involving manipulation with the buffers.
 
     ngxe_loop;
 
+=head1 EXTENSIONS 
+
+Nginx::Engine::Cookies is a namespace for Nginx::Engine extensions.
+Each function provided by an extension should use B<ngxk_>
+prefix and follow the same calling patterns as the Nginx::Engine itself. 
 
 =head1 SEE ALSO
 
@@ -592,3 +597,4 @@ Copyright 2010 Alexandr Gomoliako. All rights reserved.
 FreeBSD-like license. Take a look at F<LICENSE> and F<LICENSE.nginx> files.
 
 =cut
+

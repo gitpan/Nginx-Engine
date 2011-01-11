@@ -9,7 +9,6 @@ META.yml
 Makefile.PL
 README
 TODO
-examples/cooked-one.pl
 examples/echo-server.pl
 examples/http-client.pl
 examples/http-server-with-parser-xs.pl
@@ -19,7 +18,6 @@ examples/resolver.pl
 examples/stateful-echo-server.pl
 examples/streaming.pl
 lib/Nginx/Engine.pm
-lib/Nginx/Engine/Cookies/Resolver.pm
 nginx/CHANGES
 nginx/CHANGES.ru
 nginx/LICENSE
@@ -108,9 +106,7 @@ nginx/conf/scgi_params
 nginx/conf/uwsgi_params
 nginx/conf/win-utf
 nginx/configure
-nginx/contrib/geo2nginx.pl
 nginx/contrib/unicode2nginx/koi-utf
-nginx/contrib/unicode2nginx/unicode-to-nginx.pl
 nginx/contrib/unicode2nginx/win-utf
 nginx/src/core/nginx.c
 nginx/src/core/nginx.h

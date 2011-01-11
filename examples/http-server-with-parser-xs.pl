@@ -130,6 +130,36 @@ ngxe_server('*', 55555, sub {
         }
 
 
+
+        # This is an example on how to do something asynchronously
+        # and work with the connection later.
+
+        if ($env->{'REQUEST_URI'} eq '/sleep') {
+
+            ngxe_reader_stop($_[0]); 
+            
+            ngxe_timeout_set(5000, sub {
+                my ($c, $buf) = @_[1,2];
+
+                my $content = "sleep finished\x0d\x0a";
+                $$buf = "HTTP/1.0 200 OK\x0d\x0a".
+                        "Connection: close\x0d\x0a".
+                        "Cache-Control: no-cache\x0d\x0a".
+                        "Pragma: no-cache\x0d\x0a".
+                        "Content-Type: text/html\x0d\x0a".
+                        "Content-Length: ".length($content)."\x0d\x0a".
+                        "\x0d\x0a".
+                        $content;
+
+                ngxe_writer_start($c);
+
+            }, $_[0], \$_[3]); # connection, write buffer
+
+            return;
+        }
+
+
+
         # Generating web-page.
 
         my $content = '';

@@ -25,7 +25,7 @@ Revision history for Perl extension Nginx::Engine.
 	- fix: ngxe_server was not returning an error if port was already
 	  taken;
 
-0.04   GMT
+0.04  Fri Jan  7 18:10:24 2011 GMT
 	- added $_[4] to the reader's callback to control the amount of
 	  data to be read, might be useful for a lot of protocols and
 	  very benefitial for performance;
@@ -52,3 +52,11 @@ Revision history for Perl extension Nginx::Engine.
 	  and only use real ones with NGXE_START flag set
 	- timer resets every time *_start is called;
 
+0.05  Tue Jan 11 00:42:54 2011 GMT
+	- Nginx::Engine::Cookies::Resolver removed from the Nginx::Engine 
+	  distribution, keeping it clean;
+	- Added simple example on how to do something asynchronously and
+	  then return and deal with the connection again in 
+	  examples/http-server-with-parser-xs.pl;
+	Internals:
+	- callback on memory allocation failure in ngxe_client;

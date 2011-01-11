@@ -21,7 +21,7 @@ my $request = "GET / HTTP/1.0\x0d\x0a".
 ngxe_client('*', $addr, 80, 5000, sub {
 
     if ($_[1]) {
-        warn "Cannot connect\n";
+        warn "Cannot connect: $_[1]\n";
         return;
     }
 

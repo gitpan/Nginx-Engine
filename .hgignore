@@ -19,3 +19,6 @@ nginx/contrib/README$
 nginx/html/50x.html$
 nginx/html/index.html$
 nginx/src/http/modules/perl/nginx.pm$
+^upver.pl$
+^save.sh$
+^nginx/.*\.p[lm]$
