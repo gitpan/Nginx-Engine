@@ -21,4 +21,6 @@ nginx/html/index.html$
 nginx/src/http/modules/perl/nginx.pm$
 ^upver.pl$
 ^save.sh$
+^release.sh$
 ^nginx/.*\.p[lm]$
+\.orig$

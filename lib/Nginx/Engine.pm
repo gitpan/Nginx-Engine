@@ -4,17 +4,15 @@ package Nginx::Engine;
 use strict;
 use warnings;
 
-use constant {
-    NGXE_START  => 0x01,
-};
+use Nginx::Engine::Const;
+use Nginx::Engine::Bufs;
 
 require Exporter;
-
-our @ISA = qw(Exporter);
-
+our @ISA    = qw(Exporter);
 our @EXPORT = qw(
 
     ngxe_init
+    ngxe_reader_init_buffer_size
 
     ngxe_timeout_set
     ngxe_timeout_clear
@@ -43,14 +41,41 @@ our @EXPORT = qw(
 
     ngxe_loop
 
-    NGXE_START
+    ngxe_buf
+    ngxe_buffree
 
+    ngxe_parse_http_request
+    ngxe_parse_http_request_psgi
+
+    ngxe_http_server
+
+    ngxe_bufs
+    ngxe_bufsfree
+    ngxe_bufslen
+    ngxe_bufsfile
+    ngxe_bufsmd5
+
+    NGXE_START
 );
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
-require XSLoader;
-XSLoader::load('Nginx::Engine', $VERSION);
+unless ($ENV{'NGXE_PP'}) {
+    eval {
+        require XSLoader;
+        XSLoader::load('Nginx::Engine', $VERSION);
+    };
+    if ($@) {
+        warn "[WARNING] XSLoader::load('Nginx::Engine', $VERSION) failed, ".
+                "using pure-perl implementation\n" if $^O !~ /win32/i;
+
+        require Nginx::Engine::PP;
+        import Nginx::Engine::PP;
+    }
+} else {
+    require Nginx::Engine::PP;
+    import Nginx::Engine::PP;
+}
 
 # Preloaded methods go here.
 
@@ -169,11 +194,23 @@ Engine allocates a memory pool and destroys it whenever connection
 is closed. Engine registers a cleanup function for stored perl arguments 
 and callbacks to decrease their reference count with the destruction
 of the memory pool. This way memory leaks are not possible even though 
-two different memory allocators are used. 
+two different memory allocators are used.
+
+To achieve stability Nginx::Engine doesn't implement IO functions 
+but rather simply reuses nginx's internal IO. This gives a huge 
+performance boost as well by avoiding as much IO in perl as possible.
+
+=head1 LIMITATIONS
+
+fork() won't work properly in XS implementation. You should not use it 
+after ngxe_init() at all.
+
+Perl's signal handling won't work either after ngxe_init(). And there are
+no signal handlers right now. 
 
 =head1 DEPENDENCIES
 
-No dependencies. Everything comes with the module.
+No dependencies. Everything comes with the package.
 
 =head1 SUPPORTED OPERATING SYSTEMS
 
@@ -184,7 +221,7 @@ build nginx manually. Configure it without http module and with compiler
 option, that allows it to be linked as a shared library (not required for 
 gcc on x86 and -fPIC for gcc on amd64). 
 
-Tested on FreeBSD, Linux, NetBSD, Solaris and a few OpenBSD releases. 
+For other systems there is a pure-perl fallback based on C<select()>.
 
 =head1 EXPORT
 
@@ -241,6 +278,11 @@ system anyway to use more then a couple of thousands.
 So, I suggest to start with something like this:
 
     ngxe_init("./ngxe-error.log", 4096);
+
+=head2 ngxe_reader_init_buffer_size(BUFSIZE)
+
+Reader uses fixed buffer size to avoid problems with nginx using
+system malloc(). 
 
 =head1 TIMER
 
@@ -575,16 +617,10 @@ A bit more complex example involving manipulation with the buffers.
 
     ngxe_loop;
 
-=head1 EXTENSIONS 
-
-Nginx::Engine::Cookies is a namespace for Nginx::Engine extensions.
-Each function provided by an extension should use B<ngxk_>
-prefix and follow the same calling patterns as the Nginx::Engine itself. 
-
 =head1 SEE ALSO
 
-node.js L<http://nodejs.org/>, nginx L<http://nginx.org/>, L<POE>, L<EV>, 
-L<AnyEvent>
+node.js L<http://nodejs.org/>, nginx L<http://nginx.org/>, 
+L<POE>, L<AnyEvent>
 
 =head1 AUTHOR
 

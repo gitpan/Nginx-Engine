@@ -8,7 +8,10 @@ ngxe_callback_dec(ngxe_callback_t *cb)
     int i;
 
     if (cb->decremented == 0) {
-	SvREFCNT_dec(cb->handler);
+	if (cb->handler != NULL) {
+	    SvREFCNT_dec(cb->handler);
+	}
+
 	for (i = 0; i < cb->args_n; i++) {
 	    SvREFCNT_dec(cb->args[i]);
 	}
@@ -95,37 +98,62 @@ ngxe_connection_callback(ngxe_callback_t *cb, ngx_connection_t *c,
 void 
 ngxe_callback(ngxe_callback_t *cb, char decrefcnts)
 {
-	int i;
-	dSP;
+    int i;
+    ngx_connection_t *c;
+    dSP;
 
-	ENTER;
-	SAVETMPS; 
+    c = INT2PTR(ngx_connection_t *, SvIV(cb->args[0]));
 
-	PUSHMARK(SP);
-	EXTEND(SP, cb->args_n);
-        for (i = 0; i < cb->args_n; i++) {
-		PUSHs(cb->args[i]);
-	}
-	PUTBACK;
+    ngxe_debug("(%p) ngxe_callback called", c);
 
-	call_sv(cb->handler, G_VOID|G_DISCARD);
+    if (cb->handler == NULL) {
+        ngxe_debug("(%p) ngxe_callback: no perl handler found", c);
 
-	if (decrefcnts) {
-	    if (cb->decremented == 0) {
-		SvREFCNT_dec(cb->handler);
-		for (i = 0; i < cb->args_n; i++) {
-			SvREFCNT_dec(cb->args[i]);
-		}
+	if (cb->native_handler != NULL) {
+	    ngxe_debug("(%p) ngxe_callback: native handler found", c);
 
-		cb->args_n = 0;
-		cb->decremented = 1;
-	    }
+	    cb->native_handler(c);
+	} else {
+	    ngxe_debug("(%p) ngxe_callback: no native handler found", c);
 	}
 
-	FREETMPS; 
-	LEAVE;
-
+        ngxe_debug("(%p) ngxe_callback returned", c);
 	return;
+    }
+
+
+    ENTER;
+    SAVETMPS; 
+
+    PUSHMARK(SP);
+    EXTEND(SP, cb->args_n);
+    for (i = 0; i < cb->args_n; i++) {
+	    PUSHs(cb->args[i]);
+    }
+    PUTBACK;
+
+    call_sv(cb->handler, G_VOID|G_DISCARD);
+
+    if (decrefcnts) {
+	if (cb->decremented == 0) {
+	    if (cb->handler != NULL) {
+		SvREFCNT_dec(cb->handler);
+	    }
+
+	    for (i = 0; i < cb->args_n; i++) {
+		    SvREFCNT_dec(cb->args[i]);
+	    }
+
+	    cb->args_n = 0;
+	    cb->decremented = 1;
+	}
+    }
+
+    FREETMPS; 
+    LEAVE;
+
+    ngxe_debug("(%p) ngxe_callback returned", c);
+    return;
 }
 
 
@@ -133,13 +161,21 @@ void
 ngxe_callback_cleanup(void *data)
 {
     ngxe_callback_t  *cb;
+#ifdef NGXE_DEBUG
+    ngx_connection_t *c;
+
+    c = NULL;
+#endif
 
     cb = (ngxe_callback_t *) data;
 
-    if (cb->handler == NULL) {
-	/* not using perl handler -- no point to cleanup */
-	return;
+#ifdef NGXE_DEBUG
+    if (!cb->decremented) {
+        c = INT2PTR(ngx_connection_t *, SvIV(cb->args[0]));
     }
+#endif
+
+    ngxe_debug("(%p) ngxe_callback_cleanup", c);
 
     if (cb->decremented == 0) {
 	ngxe_callback_dec(cb);

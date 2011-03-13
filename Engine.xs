@@ -2,6 +2,8 @@
 #include <ngxe.h>
 
 static int ngxe_initialized;
+static int ngxe_initialized_signals;
+static int reader_buffer_size;
 
 MODULE = Nginx::Engine		PACKAGE = Nginx::Engine		
 
@@ -205,6 +207,9 @@ ngxe_reader(connection, start, timeout, sub, ...)
 	ngx_connection_t    *c;
 	ngxe_callback_t     *cb;
 	ngx_pool_cleanup_t  *cbcln;
+#ifdef NGXE_READER_USE_BUFS
+	ngx_pool_cleanup_t  *bufcln;
+#endif
 	ngxe_session_t      *s;
 	int                  i, args_offset, args_extra;
 
@@ -268,10 +273,25 @@ ngxe_reader(connection, start, timeout, sub, ...)
 
 	/* $reader_buffer */
 	if (s->reader_buffer == NULL) {
-		cb->args[2] = sv_2mortal(newSV(16384));
+#ifdef NGXE_READER_USE_BUFS
+		cb->args[2] = ngxe_buf();
 		SvREFCNT_inc(cb->args[2]);
 		SvPOK_only(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
+
+		bufcln = ngx_pool_cleanup_add(c->pool, 0);
+		if (bufcln == NULL) {
+			warn("Failed to allocate memory for buffer's cleanup");
+			XSRETURN_UNDEF;
+		}
+		bufcln->data = (void *) cb->args[2];
+		bufcln->handler = ngxe_buf_cleanup;
+#else
+		cb->args[2] = sv_2mortal(newSV(reader_buffer_size));
+		SvREFCNT_inc(cb->args[2]);
+		SvPOK_only(cb->args[2]);
+		SvCUR_set(cb->args[2], 0);
+#endif
 
 		s->reader_buffer = cb->args[2]; 
 	} else {
@@ -433,20 +453,45 @@ ngxe_writer_buffer_set(connection, data)
 		XSRETURN_UNDEF;
 	}
 
-	if (s->writer_buffer != NULL) {
+	if (s->writer_buffer == NULL) {
+		warn("s->writer_buffer is not initialized, ignoring");
+		XSRETURN_UNDEF;
+	}
+
+	if (SvROK(data) && SvTYPE(SvRV(data)) == SVt_PV) {
+
+		sv_setsv(s->writer_buffer, data);
+
+		s->writer_offset = 0;
+
+		ngxe_writer_start(c);
+
+	} else if (SvROK(data) && SvTYPE(SvRV(data)) == SVt_PVAV) {
+
+		sv_setsv(s->writer_buffer, data);
+
+		s->writer_offset = 0;
+		s->writer_index = 0;
+
+		ngxe_writer_start(c);
+
+	} else if (SvTYPE(data) == SVt_PV) {
+
 		if (SvCUR(data) == 0) {
 			XSRETURN_UNDEF;
 		}
 
 		sv_setsv(s->writer_buffer, data);
-		SvPOK_only(s->writer_buffer);
 
 		ngxe_writer_start(c);
-	} else {
-		warn("s->writer_buffer is not initialized, ignoring");
-		XSRETURN_UNDEF;
-	}
 
+	} else {
+
+		sv_setsv(s->writer_buffer, data);
+		SvPOK_on(s->writer_buffer);
+
+		ngxe_writer_start(c);
+	}
 
 
 
@@ -525,6 +570,9 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 	ngx_connection_t    *c;
 	ngxe_callback_t     *cb;
 	ngx_pool_cleanup_t  *cbcln;
+#ifdef NGXE_READER_USE_BUFS
+	ngx_pool_cleanup_t  *bufcln;
+#endif
 	ngxe_session_t      *s;
 	int                  i, args_offset, args_extra;
 
@@ -587,10 +635,25 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 
 	/* $reader_buffer */
 	if (s->reader_buffer == NULL) {
-		cb->args[2] = sv_2mortal(newSV(16384));
+#ifdef NGXE_READER_USE_BUFS
+		cb->args[2] = ngxe_buf();
 		SvREFCNT_inc(cb->args[2]);
-		SvPOK_only(cb->args[2]);
+		SvPOK_on(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
+
+		bufcln = ngx_pool_cleanup_add(c->pool, 0);
+		if (bufcln == NULL) {
+			warn("Failed to allocate memory for buffer's cleanup");
+			XSRETURN_UNDEF;
+		}
+		bufcln->data = (void *) cb->args[2];
+		bufcln->handler = ngxe_buf_cleanup;
+#else
+		cb->args[2] = sv_2mortal(newSV(reader_buffer_size));
+		SvREFCNT_inc(cb->args[2]);
+		SvPOK_on(cb->args[2]);
+		SvCUR_set(cb->args[2], 0);
+#endif
 
 		s->reader_buffer = cb->args[2]; 
 	} else {
@@ -604,16 +667,24 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 		/* sv_setsv(cb->args[3], buffer); */
 		cb->args[3] = sv_2mortal(newSVsv(buffer)); 
 		SvREFCNT_inc(cb->args[3]);
-		SvPOK_only(cb->args[3]);
+		/* SvPOK_only(cb->args[3]); */
 
 		s->writer_buffer = cb->args[3];
 	} else {
 		cb->args[3] = s->writer_buffer;
 		SvREFCNT_inc(cb->args[3]);
 		sv_setsv(cb->args[3], buffer);
-		SvPOK_only(cb->args[3]);
+		/* SvPOK_only(cb->args[3]); */
 	}
-	
+
+	/* making sure write buffer is supported type */
+	if (!((SvROK(buffer) && SvTYPE(SvRV(buffer)) == SVt_PV) || 
+	      (SvROK(buffer) && SvTYPE(SvRV(buffer)) == SVt_PVAV) ||
+	      (SvTYPE(buffer) == SVt_PV))) 
+	{
+		SvPOK_on(s->writer_buffer);
+	}
+
 
 	/* ... */
 	for (i = args_extra; i < cb->args_n; i++) {
@@ -932,6 +1003,7 @@ ngxe_server(address, port, sub, ...)
     CODE:
 	in_addr_t            inaddr;
 	size_t               nlen;
+	ngx_listening_t     *ls;
 	ngx_connection_t    *c;
 	ngxe_callback_t     *cb;
 	ngx_pool_cleanup_t  *cbcln;
@@ -953,8 +1025,14 @@ ngxe_server(address, port, sub, ...)
 		}
 	}
 
-	c = ngxe_server_create((ngx_cycle_t *) ngx_cycle, inaddr, 
+	ls = ngxe_server_create((ngx_cycle_t *) ngx_cycle, inaddr, 
 							(in_port_t )port);
+	if (ls == NULL) {
+	    warn("ngxe_server_create() failed");
+	    XSRETURN_UNDEF;
+	}
+
+	c = ls->connection;
 
 	if (c == NULL) {
 	    warn("ngxe_server_create() failed");
@@ -1019,6 +1097,7 @@ ngxe_server(address, port, sub, ...)
 
 
 
+
 void 
 ngxe_init(filename, ...)
 	char *filename
@@ -1030,12 +1109,16 @@ ngxe_init(filename, ...)
 		XSRETURN_UNDEF;
 	}
 
+	reader_buffer_size = 32768;
+
 	connections = 512;
 
-	if (items == 3) { /* compatible with old ngxe_init() */
-		connections = SvIV(ST(2));
-	} else if (items >= 2) {
+	if (items >= 2) {
 		connections = SvIV(ST(1));
+	}
+
+	if (items >= 3) { 
+		reader_buffer_size = SvIV(ST(2));
 	}
 
 	if (connections < 16) {
@@ -1044,6 +1127,9 @@ ngxe_init(filename, ...)
 	}
 
 	ngx_ngxe_init(filename, 0, connections);
+
+	ngxe_connection_bufsize_init(reader_buffer_size);
+	ngxe_bufs_init(reader_buffer_size);
 
 	ngxe_initialized = 1;
 
@@ -1056,7 +1142,15 @@ ngxe_loop()
 		XSRETURN_UNDEF;
 	}
 
-	SAVETMPS;
+	if (ngxe_initialized_signals != 1) {
+		if (ngx_ngxe_init_signals() != 0) {
+		    croak("Failed to initialize signals");
+		    XSRETURN_UNDEF;
+		} 
+
+		ngxe_initialized_signals = 1;
+	}
+
 	for (;;) {
 		ngx_process_events_and_timers((ngx_cycle_t *) ngx_cycle);
 
@@ -1069,5 +1163,109 @@ ngxe_loop()
 		    ngx_reopen_files((ngx_cycle_t *) ngx_cycle, (ngx_uid_t) -1);
         	}
 	}
-	FREETMPS;
+
+void
+ngxe_reader_init_buffer_size(bufsize) 
+	int  bufsize
+    CODE:
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
+
+	reader_buffer_size = bufsize;
+
+
+
+
+
+SV *
+ngxe_newSV(size)
+	int size
+    CODE:
+	RETVAL = newSV(size);
+	SvPOK_only(RETVAL);
+	SvCUR_set(RETVAL, 0);
+    OUTPUT:
+	RETVAL
+
+
+SV *
+ngxe_buf()
+    CODE:
+	SV  *sv, *rv;
+
+	sv = ngxe_buf();
+	rv = newRV_noinc(sv);
+
+	RETVAL = rv;
+    OUTPUT:
+	RETVAL
+
+void
+ngxe_buffree(rv)
+	SV  *rv
+    CODE:
+	SV  *sv;
+
+	sv = SvRV(rv);
+
+	ngxe_buffree(sv);
+
+        SvRV_set(rv, &PL_sv_undef); 
+	SvSetSV(rv, &PL_sv_undef); 
+
+
+
+
+SV *
+ngxe_blessed(size)
+	int   size
+    CODE:
+	SV  *sv;
+
+	sv = newSV(size);
+	SvPOK_only(sv);
+	SvCUR_set(sv, 0);
+
+	RETVAL = newRV_noinc(sv);
+	sv_bless(RETVAL, gv_stashpv("Nginx::Engine", 0));
+    OUTPUT:
+	RETVAL
+
+
+
+
+
+
+int
+ngxe_parse_http_request(buf, envref)
+	SV  *buf
+	SV  *envref
+    CODE:
+
+	if (!SvROK(envref) || SvTYPE(SvRV(envref)) != SVt_PVHV)
+		croak("second param to parse_http_request must be a hashref");
+ 
+	RETVAL = ngxe_parse_http_request(buf, envref);
+    OUTPUT:
+	RETVAL
+
+
+
+int
+ngxe_parse_http_request_psgi(buf, envref)
+	SV  *buf
+	SV  *envref
+    CODE:
+
+	if (!SvROK(envref) || SvTYPE(SvRV(envref)) != SVt_PVHV)
+		croak("second param to parse_http_request must be a hashref");
+ 
+	RETVAL = ngxe_parse_http_request_psgi(buf, envref);
+    OUTPUT:
+	RETVAL
+
+
 

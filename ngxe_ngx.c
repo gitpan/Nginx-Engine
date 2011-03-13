@@ -496,7 +496,19 @@ ngx_ngxe_os_init(ngx_log_t *log)
 }
 
 
+ngx_int_t
+ngx_ngxe_init_signals() 
+{
 
+/*
+#if !(NGX_WIN32)
+    if (ngx_init_signals(ngx_cycle->log) != NGX_OK) {
+        return 1;
+    }
+#endif
+*/
+    return 0;
+}
 
 
 ngx_int_t
@@ -550,7 +562,6 @@ ngx_ngxe_init(char *logfilename, int usestderr, int connections)
     if (ngx_crc32_table_init() != NGX_OK) {
         return 1;
     }
-
 
 #if !(NGX_WIN32)
     if (ngx_init_signals(cycle->log) != NGX_OK) {

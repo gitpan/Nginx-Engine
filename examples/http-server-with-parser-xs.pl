@@ -10,7 +10,7 @@ use HTTP::Parser::XS qw(parse_http_request);
 # Parsing http request with another XS call.
 # This XS call slows things down a bit but produces CGI-like %ENV.
 
-ngxe_init("", 512);
+ngxe_init("", 512, 8192);
 
 ngxe_server('*', 55555, sub {
 

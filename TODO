@@ -1,4 +1,7 @@
 
+  - signals
+
+
   - describe naming, calling and error handling in the documentation,
     like always issuing a warning if callback is not going to be called
     on error and always passing error as the second argument, etc 
@@ -6,14 +9,6 @@
   - consider cleanup callbacks instead of return on error
 
   - use FLAGS to accelerate desired behaviours (parsing HTTP, etc.)
+    or not
 
 
-Someday:
-
-  - ngxe_resolver()
-
-  - ngxe_http_server()
-
-  - rewrite nginx ./configure scripts to use MakeMaker and to be able 
-    to build nginx on windows and other platforms along with the 
-    Nginx::Engine

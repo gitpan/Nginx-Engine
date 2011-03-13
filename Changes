@@ -60,3 +60,21 @@ Revision history for Perl extension Nginx::Engine.
 	  examples/http-server-with-parser-xs.pl;
 	Internals:
 	- callback on memory allocation failure in ngxe_client;
+
+0.06  Sun Mar 13 21:13:27 2011 GMT
+	- added pure-perl fallback;
+	- added ngxe_buf(), ngxe_buffree();
+	- tested in production for a few weeks;
+	Internals:
+	- ngxe_client was calling internal write handler [itself] 
+	  if there was no writer;
+	- added ngxe_debug.h and initial debugging support: 
+	      perl Makefile.PL DEFINE="-DNGXE_DEBUG"
+	- limiting reader's buffer size, limit can be set as a 3rd 
+	  argument of ngxe_init();
+	- writer extended to support ARRAYREF of SCALARREFs (ngxe_bufs) and
+	  SCALARREF as a buffer;
+	- some timeout fixes;
+	- SAVETMPS/FREETMPS removed from the ngxe_loop, was causing really
+	  weird problems;
+
