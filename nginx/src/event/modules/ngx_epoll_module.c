@@ -775,7 +775,7 @@ ngx_epoll_init_conf(ngx_cycle_t *cycle, void *conf)
 {
     ngx_epoll_conf_t *epcf = conf;
 
-    ngx_conf_init_uint_value(epcf->events, 512);
+    ngx_conf_init_uint_value(epcf->events, 4096);
 
     return NGX_CONF_OK;
 }

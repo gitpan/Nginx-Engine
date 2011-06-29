@@ -1,17 +1,14 @@
 package Nginx::Engine;
 
-# use 5.008008;
 use strict;
 use warnings;
-
-use Nginx::Engine::Const;
-use Nginx::Engine::Bufs;
 
 require Exporter;
 our @ISA    = qw(Exporter);
 our @EXPORT = qw(
 
     ngxe_init
+    ngxe_bufsize
     ngxe_reader_init_buffer_size
 
     ngxe_timeout_set
@@ -36,6 +33,7 @@ our @EXPORT = qw(
     ngxe_writer_stop_reader_start
     ngxe_writer_timeout
     ngxe_writer_buffer_set
+    ngxe_writer_put
 
     ngxe_close
 
@@ -44,21 +42,11 @@ our @EXPORT = qw(
     ngxe_buf
     ngxe_buffree
 
-    ngxe_parse_http_request
-    ngxe_parse_http_request_psgi
-
-    ngxe_http_server
-
-    ngxe_bufs
-    ngxe_bufsfree
-    ngxe_bufslen
-    ngxe_bufsfile
-    ngxe_bufsmd5
-
     NGXE_START
+    NXSTART
 );
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 unless ($ENV{'NGXE_PP'}) {
     eval {
@@ -66,15 +54,17 @@ unless ($ENV{'NGXE_PP'}) {
         XSLoader::load('Nginx::Engine', $VERSION);
     };
     if ($@) {
-        warn "[WARNING] XSLoader::load('Nginx::Engine', $VERSION) failed, ".
-                "using pure-perl implementation\n" if $^O !~ /win32/i;
-
         require Nginx::Engine::PP;
         import Nginx::Engine::PP;
     }
+
 } else {
     require Nginx::Engine::PP;
     import Nginx::Engine::PP;
+}
+
+if (!defined &Nginx::Engine::NXSTART) {
+    eval qq(use Nginx::Engine::Const);
 }
 
 # Preloaded methods go here.
@@ -278,11 +268,6 @@ system anyway to use more then a couple of thousands.
 So, I suggest to start with something like this:
 
     ngxe_init("./ngxe-error.log", 4096);
-
-=head2 ngxe_reader_init_buffer_size(BUFSIZE)
-
-Reader uses fixed buffer size to avoid problems with nginx using
-system malloc(). 
 
 =head1 TIMER
 
@@ -630,7 +615,7 @@ Alexandr Gomoliako <zzz@zzz.org.ua>
 
 Copyright 2010 Alexandr Gomoliako. All rights reserved.
 
-FreeBSD-like license. Take a look at F<LICENSE> and F<LICENSE.nginx> files.
+FreeBSD License. Take a look at F<LICENSE> and F<nginx/LICENSE> files.
 
 =cut
 

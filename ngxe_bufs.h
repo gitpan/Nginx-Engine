@@ -23,7 +23,32 @@ SV    *ngxe_buf();
 void   ngxe_buffree(SV *sv);
 void   ngxe_buf_cleanup(void *data);
 
-#define NGXE_READER_USE_BUFS 
+int  ngxe_pagesize;
+
+/* #define NGXE_READER_USE_BUFS */
+
+
+
+
+#define ngxe_buf_newsv(s) ( \
+	s <=     4080 ? newSV(    4080) : \
+	s <=    32768 ? newSV(   32768 + ngxe_pagesize - 16) : \
+	s <=   262144 ? newSV(  262144 + ngxe_pagesize - 16) : \
+	s <=  1048576 ? newSV( 1048576 + ngxe_pagesize - 16) : \
+	s <=  4194304 ? newSV( 4194304) : \
+	newSV(s) \
+)
+
+#define ngxe_buf_svgrow(sv,s) ( \
+	s <=     4080 ? SvGROW(sv,     4080) : \
+	s <=    32768 ? SvGROW(sv,    32768 + ngxe_pagesize - 16) : \
+	s <=   262144 ? SvGROW(sv,   262144 + ngxe_pagesize - 16) : \
+	s <=  1048576 ? SvGROW(sv,  1048576 + ngxe_pagesize - 16) : \
+	s <=  4194304 ? SvGROW(sv,  4194304) : \
+	SvGROW(sv, s) \
+)
+
+
 
 #endif /* _NGXE_BUFS_H_INCLUDED_ */
 

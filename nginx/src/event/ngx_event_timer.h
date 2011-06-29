@@ -38,7 +38,6 @@ ngx_event_del_timer(ngx_event_t *ev)
                    "event timer del: %d: %M",
                     ngx_event_ident(ev->data), ev->timer.key);
 
-
     ngx_mutex_lock(ngx_event_timer_mutex);
 
     ngx_rbtree_delete(&ngx_event_timer_rbtree, &ev->timer);
@@ -60,7 +59,6 @@ ngx_event_add_timer(ngx_event_t *ev, ngx_msec_t timer)
 {
     ngx_msec_t      key;
     ngx_msec_int_t  diff;
-
 
     key = ngx_current_msec + timer;
 

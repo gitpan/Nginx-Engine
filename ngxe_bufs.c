@@ -1,7 +1,21 @@
 
 #include <ngxe.h>
 
+/* 
+ * TODO need to cleanup or remove all that, not using it anymore anyway
+ */
+
+
 static ngxe_bufs_t  ngxe_bufs;
+
+#ifndef Newx
+#define Newx(v,c,t) \
+    ( (v) = ( (t*) malloc( (c) * sizeof(t) ) ) )
+#endif
+
+#ifndef ZeroD
+#define ZeroD(d,n,t)   memzero((char*)(d), (n) * sizeof(t))
+#endif
 
 void
 ngxe_bufs_init(ngx_int_t svlen) 
@@ -14,6 +28,8 @@ ngxe_bufs_init(ngx_int_t svlen)
 }
 
 
+#ifdef NGXE_READER_USE_BUFS
+
 SV *
 ngxe_buf()
 {
@@ -25,10 +41,14 @@ ngxe_buf()
         ngxe_debug("ngxe_buf: allocating 64 new buffers");
 
 	Newx(buf, 1024, ngxe_buf_t);
+	/* buf = (ngxe_buf_t *) malloc(sizeof(ngxe_buf_t) * 1024); */
+
 	if (buf == NULL) {
 	    return NULL;
 	}
+
 	ZeroD(buf, 1024, ngxe_buf_t);
+	/* ngx_memzero(buf, sizeof(ngxe_buf_t) * 1024); */
 
 	for (i = 0; i < 1024; i++) {
 	    buf[i].next_buf = ngxe_bufs.free_buf;
@@ -66,7 +86,6 @@ ngxe_buf()
     return buf->sv;
 }
 
-
 void 
 ngxe_buffree(SV *sv)
 {
@@ -91,6 +110,42 @@ ngxe_buffree(SV *sv)
     ngxe_debug("ngxe_bufs: %i %i", ngxe_bufs.inuse_bufs_n, 
 				   ngxe_bufs.free_bufs_n);
 }
+
+#else /* NGXE_READER_USE_BUFS */
+
+SV *
+ngxe_buf()
+{
+    SV  *sv;
+
+    /* warn("ngxe_buf(), len = %i\n", ngxe_bufs.svlen); */
+    sv = sv_2mortal(newSV(ngxe_bufs.svlen));
+    SvPOK_only(sv);
+    SvCUR_set(sv, 0);
+    SvREFCNT_inc(sv);
+
+    return sv;
+}
+
+void 
+ngxe_buffree(SV *sv)
+{
+
+    /* warn("ngxe_buffree()\n"); */
+
+    if (SvTYPE(sv) == SVt_PV && SvPVX_const(sv) && SvLEN(sv)) {
+	/* warn("destroying pv in sv, SvLEN(sv) = %i\n", SvLEN(sv)); */
+	SvPV_free(sv);
+	SvPV_set(sv, NULL);
+	SvLEN_set(sv, 0);
+    }
+
+    SvOK_off(sv);
+    SvREFCNT_dec(sv);
+}
+
+#endif /* NGXE_READER_USE_BUFS */
+
 
 
 void 

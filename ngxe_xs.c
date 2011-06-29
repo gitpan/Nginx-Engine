@@ -24,76 +24,6 @@ ngxe_callback_dec(ngxe_callback_t *cb)
 }
 
 
-void 
-ngxe_connection_buffer_callback(ngxe_callback_t *cb, ngx_connection_t *c, 
-    SV *buffer)
-{
-	int i;
-	dSP;
-
-	ENTER;
-	SAVETMPS; 
-
-	PUSHMARK(SP);
-	EXTEND(SP, cb->args_n + 1);
-	sv_setiv(cb->args[0], PTR2IV(c)); /* changing first arg */
-	PUSHs(cb->args[0]);
-	PUSHs(buffer);
-        for (i = 1; i < cb->args_n; i++) {
-		PUSHs(cb->args[i]);
-	}
-	PUTBACK;
-
-	call_sv(cb->handler, G_VOID|G_DISCARD);
-
-	FREETMPS; 
-	LEAVE;
-
-	return;
-}
-
-
-
-
-void 
-ngxe_connection_callback(ngxe_callback_t *cb, ngx_connection_t *c, 
-    char decrefcnts)
-{
-	int i;
-	dSP;
-
-	ENTER;
-	SAVETMPS; 
-
-	PUSHMARK(SP);
-	EXTEND(SP, cb->args_n);
-	sv_setiv(cb->args[0], PTR2IV(c)); /* changing first arg */
-        for (i = 0; i < cb->args_n; i++) {
-		PUSHs(cb->args[i]);
-	}
-	PUTBACK;
-
-	call_sv(cb->handler, G_VOID|G_DISCARD);
-
-	if (decrefcnts) {
-	    if (cb->decremented == 0) {
-		SvREFCNT_dec(cb->handler);
-		for (i = 0; i < cb->args_n; i++) {
-			SvREFCNT_dec(cb->args[i]);
-		}
-
-		cb->args_n = 0;
-		cb->decremented = 1;
-	    }
-	}
-
-	FREETMPS; 
-	LEAVE;
-
-	return;
-}
-
-
 
 void 
 ngxe_callback(ngxe_callback_t *cb, char decrefcnts)
@@ -127,12 +57,20 @@ ngxe_callback(ngxe_callback_t *cb, char decrefcnts)
 
     PUSHMARK(SP);
     EXTEND(SP, cb->args_n);
+
+    SvREFCNT_inc(cb->handler);
     for (i = 0; i < cb->args_n; i++) {
-	    PUSHs(cb->args[i]);
+	SvREFCNT_inc(cb->args[i]);
+	PUSHs(cb->args[i]);
     }
     PUTBACK;
 
     call_sv(cb->handler, G_VOID|G_DISCARD);
+
+    for (i = 0; i < cb->args_n; i++) {
+        SvREFCNT_dec(cb->args[i]);
+    }
+    SvREFCNT_dec(cb->handler);
 
     if (decrefcnts) {
 	if (cb->decremented == 0) {

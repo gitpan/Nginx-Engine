@@ -8,7 +8,9 @@
 #include <ngxe_xs.h>
 #include <ngxe_bufs.h>
 #include <ngxe_connection.h>
-#include <ngxe_http.h>
+
+#define NXSTART     0x01
+#define NXRVBUF     0x02
 
 #define NGXE_START  0x01
 

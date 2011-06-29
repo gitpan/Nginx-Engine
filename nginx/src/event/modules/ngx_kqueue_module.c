@@ -777,8 +777,8 @@ ngx_kqueue_init_conf(ngx_cycle_t *cycle, void *conf)
 {
     ngx_kqueue_conf_t *kcf = conf;
 
-    ngx_conf_init_uint_value(kcf->changes, 512);
-    ngx_conf_init_uint_value(kcf->events, 512);
+    ngx_conf_init_uint_value(kcf->changes, 4096);
+    ngx_conf_init_uint_value(kcf->events, 4096);
 
     return NGX_CONF_OK;
 }

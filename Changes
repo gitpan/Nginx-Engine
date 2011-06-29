@@ -1,29 +1,60 @@
 Revision history for Perl extension Nginx::Engine.
 
-0.01  Wed Dec 15 03:01:23 2010 GMT +0200
-	- original version; created by h2xs 1.23 with options
-		-A -n Nginx::Engine
+0.07  Thu Jun 30 01:37:23 EEST 2011
+	- added another example application: autocomplete-server.pl,
+	  thanks to Yung-chung Lin;
+	- more work on examples; Net::DNS-based resolver moved to examples
+	  from separate module: it is simple enough to just use needed
+	  parts of the code and avoid unnecessary complications;
+	- removed couple of not so good examples;
+	- a lot of cleaning up;
+	- added ngxe_writer_put as an alias to ngxe_writer_buffer_set;
+	- added Nginx::Engine::Debug - tiny code filter to uncomment
+	  # warn ... things, can be enabled with --ngxe-debug command line
+	  argument or NGXE_DEBUG=1 environment variable;
+	XS internals:
+	- reader checks whether or not writer was started in callback
+	  and does nothing if it was;
+	- now callback increments refcnt of every argument before passing 
+	  it to call_sv and decrements on return avoiding premature 
+	  destruction of SVs if connection was closed somewhere else;
+	- nginx updated to 0.8.54; 1.0.4 was crashing on c->recv with
+	  kqueue;
+	- default kqueue/epoll changes/events raised to 4096;
+	PP internals:
+	- reader won't call back unless its buffer has $_[4] bytes
+	  and $_[4] > 0, but still no need to rely on that feature, it should
+	  be used as a hint only, kind of like lowat;
+	- fix: autoswitch: writer was enabling reader back on after 
+	  ngxe_writer_buffer_set, reader was checking $rin instead of $rout;
+	- ngxe_buf returns blessed SCALARREF from pool that puts itself
+	  back to the pool on DESTROY;
 
-0.02  Wed Dec 29 21:58:40 2010 GMT
-	- reader and writer timeouts can be changed via *_start functions
-	  as a second argument;
-	- added ngxe_reader_timeout, ngxe_writer_timeout;
-	- added initialization flag check in every XS function;
-	- ngxe_init requires only single argument now, allocating
-	  512 connections by default, old syntax is still supported
+0.06  Sun Mar 13 21:13:27 2011 GMT
+	- added pure-perl fallback;
+	- added ngxe_buf(), ngxe_buffree();
+	- tested in production for a few weeks;
+	Internals:
+	- ngxe_client was calling internal write handler [itself] 
+	  if there was no writer;
+	- added ngxe_debug.h and initial debugging support: 
+	      perl Makefile.PL DEFINE="-DNGXE_DEBUG"
+	- limiting reader's buffer size, limit can be set as a 3rd 
+	  argument of ngxe_init();
+	- writer extended to support ARRAYREF of SCALARREFs (ngxe_bufs) and
+	  SCALARREF as a buffer;
+	- some timeout fixes;
+	- SAVETMPS/FREETMPS removed from the ngxe_loop, was causing really
+	  weird problems;
 
-0.03  Sat Jan  1 22:22:19 2011 GMT
-	- START argument in both reader and writer is changed to FLAGS;
-	  NGXE_START is a flag for automatic start;
-	- reader and writer are more smart now and can start and stop
-	  depending on the write buffer;
-	- added dual calls to stop and start reader and writer in 
-	  a single perl -> xsub call but might not be needed anymore;
-	- a few automated tests for basic functionality;
-	- bugfix: failed connect to localhost was crashing, required 
-	  peer->name to log an error, which was not used at all;
-	- fix: ngxe_server was not returning an error if port was already
-	  taken;
+0.05  Tue Jan 11 00:42:54 2011 GMT
+	- Nginx::Engine::Cookies::Resolver removed from the Nginx::Engine 
+	  distribution, keeping it clean;
+	- Added simple example on how to do something asynchronously and
+	  then return and deal with the connection again in 
+	  examples/http-server-with-parser-xs.pl;
+	Internals:
+	- callback on memory allocation failure in ngxe_client;
 
 0.04  Fri Jan  7 18:10:24 2011 GMT
 	- added $_[4] to the reader's callback to control the amount of
@@ -52,29 +83,29 @@ Revision history for Perl extension Nginx::Engine.
 	  and only use real ones with NGXE_START flag set
 	- timer resets every time *_start is called;
 
-0.05  Tue Jan 11 00:42:54 2011 GMT
-	- Nginx::Engine::Cookies::Resolver removed from the Nginx::Engine 
-	  distribution, keeping it clean;
-	- Added simple example on how to do something asynchronously and
-	  then return and deal with the connection again in 
-	  examples/http-server-with-parser-xs.pl;
-	Internals:
-	- callback on memory allocation failure in ngxe_client;
+0.03  Sat Jan  1 22:22:19 2011 GMT
+	- START argument in both reader and writer is changed to FLAGS;
+	  NGXE_START is a flag for automatic start;
+	- reader and writer are more smart now and can start and stop
+	  depending on the write buffer;
+	- added dual calls to stop and start reader and writer in 
+	  a single perl -> xsub call but might not be needed anymore;
+	- a few automated tests for basic functionality;
+	- bugfix: failed connect to localhost was crashing, required 
+	  peer->name to log an error, which was not used at all;
+	- fix: ngxe_server was not returning an error if port was already
+	  taken;
 
-0.06  Sun Mar 13 21:13:27 2011 GMT
-	- added pure-perl fallback;
-	- added ngxe_buf(), ngxe_buffree();
-	- tested in production for a few weeks;
-	Internals:
-	- ngxe_client was calling internal write handler [itself] 
-	  if there was no writer;
-	- added ngxe_debug.h and initial debugging support: 
-	      perl Makefile.PL DEFINE="-DNGXE_DEBUG"
-	- limiting reader's buffer size, limit can be set as a 3rd 
-	  argument of ngxe_init();
-	- writer extended to support ARRAYREF of SCALARREFs (ngxe_bufs) and
-	  SCALARREF as a buffer;
-	- some timeout fixes;
-	- SAVETMPS/FREETMPS removed from the ngxe_loop, was causing really
-	  weird problems;
+0.02  Wed Dec 29 21:58:40 2010 GMT
+	- reader and writer timeouts can be changed via *_start functions
+	  as a second argument;
+	- added ngxe_reader_timeout, ngxe_writer_timeout;
+	- added initialization flag check in every XS function;
+	- ngxe_init requires only single argument now, allocating
+	  512 connections by default, old syntax is still supported
+
+0.01  Wed Dec 15 03:01:23 2010 GMT +0200
+	- original version; created by h2xs 1.23 with options
+		-A -n Nginx::Engine
+
 

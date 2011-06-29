@@ -6,3 +6,13 @@ BEGIN {
 };
 
 
+if (defined $Nginx::Engine::PP::VERSION) {
+    diag "\n".
+         " ************************************ \n".
+         "\n".
+         "    Using pure-perl implementation \n".
+         "            version $Nginx::Engine::PP::VERSION \n".
+         "\n".
+         " ************************************ \n".
+         "";
+}

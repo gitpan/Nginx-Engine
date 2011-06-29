@@ -57,6 +57,8 @@ ngxe_reader_handler(ngx_event_t *ev)
 	return;
     }
 
+    ngxe_debug("(%p) cb == %p", c, cb);
+
     svbuf = s->reader_buffer;
     if (svbuf == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, 
@@ -65,6 +67,16 @@ ngxe_reader_handler(ngx_event_t *ev)
 	ngxe_debug("(%p) ngxe_reader_handler returned", c);
 	return;
     }
+
+    ngxe_debug("(%p) svbuf == %p", c, svbuf);
+    ngxe_debug("(%p) ev->timedout == %i", c, ev->timedout);
+    ngxe_debug("(%p) ev->ready == %i", c, ev->ready);
+    ngxe_debug("(%p) ev->error == %i", c, ev->error);
+    ngxe_debug("(%p) ev->eof == %i", c, ev->eof);
+    ngxe_debug("(%p) ev->unexpected_eof == %i", c, ev->unexpected_eof);
+    ngxe_debug("(%p) ev->pending_eof == %i", c, ev->pending_eof);
+    ngxe_debug("(%p) ev->closed == %i", c, ev->closed);
+    ngxe_debug("(%p) ev->available == %i", c, ev->available);
 
     if (ev->timedout) {
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
@@ -84,31 +96,50 @@ ngxe_reader_handler(ngx_event_t *ev)
 	return;
     }
 
+    ngxe_debug("(%p) c->read->timer_set == %i", c, c->read->timer_set);
+
     if (c->read->timer_set) {
 	ngxe_debug_timer("(%p) ngx_del_timer(c->read)", c);
 
 	ngx_del_timer(c->read);
     }
 
+
 RECVAGAIN:
+    ngxe_debug("(%p) RECVAGAIN:", c);
 
-    SvGROW(svbuf, ngxe_connection_bufsize);
+    if (SvLEN(svbuf) == SvCUR(svbuf) + 1) {
+        ngxe_buf_svgrow(svbuf, SvLEN(svbuf) + 16384);
+    }
 
-    buf = (u_char *) SvPV_nolen(svbuf);
+    ngxe_debug("(%p) SvPVX(svbuf) == %p", c, SvPVX(svbuf));
+    ngxe_debug("(%p) SvLEN(svbuf) == %i", c, SvLEN(svbuf));
+    ngxe_debug("(%p) SvCUR(svbuf) == %i", c, SvCUR(svbuf));
+
+    /* ngxe_buf_svgrow(svbuf, ngxe_connection_bufsize); */
+
+    buf = (u_char *) SvPVX(svbuf);
     cur = SvCUR(svbuf);
     len = SvLEN(svbuf);
-
-/* XXX TODO
-   SvGROW doesn't work properly here, using wrong malloc, probably because
-   of the headers nginx includes,
-   need fixing in nginx sources  */
 
     /* buffer already filled up */
     if (cur + 1 >= len) {
 	goto CALLBACK; 
     }
 
+    ngxe_debug("(%p) c->recv(c, %p + %i, %i)", c, buf, cur, len - cur - 1);
+
     n = c->recv(c, buf + cur, len - cur - 1);
+
+    ngxe_debug("(%p) n == %i", c, n);
+
+    ngxe_debug("(%p) ev->ready == %i", c, ev->ready);
+    ngxe_debug("(%p) ev->error == %i", c, ev->error);
+    ngxe_debug("(%p) ev->eof == %i", c, ev->eof);
+    ngxe_debug("(%p) ev->unexpected_eof == %i", c, ev->unexpected_eof);
+    ngxe_debug("(%p) ev->pending_eof == %i", c, ev->pending_eof);
+    ngxe_debug("(%p) ev->closed == %i", c, ev->closed);
+    ngxe_debug("(%p) ev->available == %i", c, ev->available);
 
     if (n == NGX_ERROR || n == 0) {
 	ngxe_debug("(%p) read error", c);
@@ -214,6 +245,12 @@ CALLBACK:
 	    return;
 	}
 
+	if (c->write->handler != ngxe_dummy_handler) {
+	    /* just in case someone called ngxe_writer_start */
+	    ngxe_debug("(%p) ngxe_reader_handler returned", c);
+	    return;
+	}
+
 	if (s->writer_callback != NULL && s->writer_buffer != NULL &&
 	      (
 	         SvROK(s->writer_buffer) || 
@@ -245,6 +282,14 @@ CALLBACK:
 	    }
 
 	    if (c->read->ready) {
+
+/*
+		if (SvLEN(s->reader_buffer) == SvCUR(s->reader_buffer) + 1) {
+		    ngxe_buf_svgrow(s->reader_buffer, 
+				    SvLEN(s->reader_buffer) + 32768);
+		}
+ */
+
 		goto RECVAGAIN;
 	    }
 	    
@@ -821,28 +866,28 @@ ngxe_writer_handler(ngx_event_t *ev)
 
     if (c == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, 
-			    "ngxe_reader_handler(): c == NULL");
+			    "ngxe_writer_handler(): c == NULL");
 	return;
     }
 
     s = (ngxe_session_t *) c->data;
     if (s == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, 
-			    "ngxe_reader_handler(): s == NULL");
+			    "ngxe_writer_handler(): s == NULL");
 	return;
     }
 
     cb = s->writer_callback;
     if (cb == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, 
-			    "ngxe_reader_handler(): cb == NULL");
+			    "ngxe_writer_handler(): cb == NULL");
 	return;
     }
 
     svbuf = s->writer_buffer;
     if (svbuf == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, 
-			    "ngxe_reader_handler(): svbuf == NULL");
+			    "ngxe_writer_handler(): svbuf == NULL");
 	return;
     }
 
@@ -893,8 +938,22 @@ ngxe_writer_handler(ngx_event_t *ev)
 
     cur = SvCUR(svbuf);
 
+#if 0
+    /* pp.c: PP)pp_undef) */
+    if (SvTYPE(sv) >= SVt_PV && SvPVX_const(sv) && SvLEN(sv)) {
+	SvPV_free(sv);
+	SvPV_set(sv, NULL);
+	SvLEN_set(sv, 0);
+    }
+    SvOK_off(sv);
+#endif
+
     /* no data in buffer to send */ 
     if (cur == 0) {
+
+	if (SvOOK(svbuf))
+	    SvOOK_off(svbuf);
+	SvCUR_set(svbuf, 0);
 
 	ngxe_callback(cb, 0);
 
@@ -906,6 +965,14 @@ SENDAGAIN:
     buf = (u_char *) SvPV_nolen(svbuf);
 
     n = c->send(c, buf, cur);
+
+    ngxe_debug("(%p) ev->ready == %i", c, ev->ready);
+    ngxe_debug("(%p) ev->error == %i", c, ev->error);
+    ngxe_debug("(%p) ev->eof == %i", c, ev->eof);
+    ngxe_debug("(%p) ev->unexpected_eof == %i", c, ev->unexpected_eof);
+    ngxe_debug("(%p) ev->pending_eof == %i", c, ev->pending_eof);
+    ngxe_debug("(%p) ev->closed == %i", c, ev->closed);
+    ngxe_debug("(%p) ev->available == %i", c, ev->available);
 
     if (n == NGX_ERROR || n == 0) {
 

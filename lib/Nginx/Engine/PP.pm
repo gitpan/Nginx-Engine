@@ -4,10 +4,11 @@ use strict;
 use warnings;
 use bytes;
 
-use Nginx::Engine::Const;
 use IO::Socket;
 use Socket qw(inet_aton inet_ntoa);
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+
+use Nginx::Engine::Const;
 
 require Exporter;
 our @ISA    = qw(Exporter);
@@ -38,6 +39,7 @@ our @EXPORT = qw(
     ngxe_writer_stop_reader_start
     ngxe_writer_timeout
     ngxe_writer_buffer_set
+    ngxe_writer_put
 
     ngxe_close
 
@@ -46,10 +48,14 @@ our @EXPORT = qw(
     ngxe_buf
     ngxe_buffree
 
+    ngxe_pp_printbufstats
+
     NGXE_START
+    NXSTART
+    NXRVBUF
 );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use constant {
     CN_ID         => 0, CN_FILENO => 0,
@@ -77,10 +83,20 @@ use constant {
 };
 
 
+our $NOPUSHBACK = 0;
 
 our $NGXE_BUFSIZE = 32768;
 
+my $quit = 0;
+
+my @XBUFSPOOL    = ();
+my $XBUFSINUSE   = 0;
+my $XBUFSFREE    = 0;
+my $XBUFSREUSED  = 0;
+my $XBUFSCREATED = 0;
+
 my @BUFSPOOL    = ();
+my $BUFSINUSE   = 0;
 my $BUFSFREE    = 0;
 my $BUFSREUSED  = 0;
 my $BUFSCREATED = 0;
@@ -108,31 +124,82 @@ sub ngxe_reader_init_buffer_size ($) {
     $NGXE_BUFSIZE = $_[0];
 }
 
+sub ngxe_pp_printbufstats {
+
+    my $xbufspool = scalar @XBUFSPOOL;
+    my $bufspool = scalar @BUFSPOOL;
+
+    print << "    END";
+
+    xbufspool     $xbufspool
+    XBUFSINUSE    $XBUFSINUSE
+    XBUFSFREE     $XBUFSFREE
+    XBUFSREUSED   $XBUFSREUSED
+    XBUFSCREATED  $XBUFSCREATED
+
+    bufspool      $bufspool
+    BUFSINUSE     $BUFSINUSE
+    BUFSFREE      $BUFSFREE
+    BUFSREUSED    $BUFSREUSED
+    BUFSCREATED   $BUFSCREATED
+
+    END
+}
+
+sub ngxe_xbuf (;$) {
+
+    if (@XBUFSPOOL) {
+        $XBUFSFREE--;
+        $XBUFSINUSE++;
+        $XBUFSREUSED++;
+
+        my $buf = pop @XBUFSPOOL;
+          $$buf = defined $_[0] ? $_[0] : '';
+        return $buf;
+    } else {
+        $XBUFSCREATED++;
+        $XBUFSINUSE++;
+
+        my $bu  = ""; # "\0" x $NGXE_BUFSIZE; 
+        my $buf = \$bu;
+          $$buf = defined $_[0] ? $_[0] : '';
+
+        return $buf;
+    }
+}
+
+sub ngxe_xbuffree ($) {
+    push @XBUFSPOOL, $_[0];
+    $XBUFSFREE++;
+    $XBUFSINUSE--;
+}
+
 sub ngxe_buf (;$) {
+    # argument is ignored in pure-perl implementation
 
     if (@BUFSPOOL) {
-        $BUFSREUSED++;
         $BUFSFREE--;
+        $BUFSINUSE++;
+        $BUFSREUSED++;
 
-        my $pbuf = pop @BUFSPOOL;
-        $$pbuf = defined $_[0] ? $_[0] : '';
-
-        return $pbuf;
+        my $buf = pop @BUFSPOOL;
+          $$buf = '';
+        return $buf;
     } else {
         $BUFSCREATED++;
+        $BUFSINUSE++;
 
-        # forcing memory allocation 
-        my $buf = "\0" x ($NGXE_BUFSIZE);
-           $buf = defined $_[0] ? $_[0] : '';
+        my $bu  = ""; # "\0" x $NGXE_BUFSIZE; 
+        my $buf = \$bu;
+          $$buf = '';
 
-        return \$buf;
+        bless $buf, 'Nginx::Engine::PP::Buf';
+        return $buf;
     }
 }
 
 sub ngxe_buffree ($) {
-    push @BUFSPOOL, $_[0];
-    ${$_[0]} = '';
-    $BUFSFREE++;
+    undef $_[0];
 }
 
 
@@ -193,7 +260,13 @@ sub timestr {
 
 sub ngxe_loop {
 
-    while (1) {
+    sub quit { $quit = 1; }
+    local $SIG{'INT'}  = \&quit;
+    local $SIG{'QUIT'} = \&quit;
+    local $SIG{'TERM'} = \&quit;
+    local $SIG{'KILL'} = \&quit;
+
+    while (!$quit) {
         ($rout, $wout) = ('', '');
 
         my $n = select($rout = $rin, $wout = $win, '', 1);
@@ -339,12 +412,13 @@ sub ngxe_reader_timeout ($;$) {
     return $rv;
 }
 
-
 sub ngxe_writer_buffer_set ($$) {
     ${$_[0]->[CN_WBUF]} = $_[1];
 
     ngxe_writer_start($_[0]);
 }
+
+*ngxe_writer_put = \&ngxe_writer_buffer_set;
 
 
 sub ngxe_server ($$$;@) {
@@ -415,8 +489,8 @@ sub ngxe_reader ($$$$;@) {
     my $rev = [];
 
     $c->[CN_READ] = $rev;
-    $c->[CN_RBUF] = ngxe_buf() if !defined $c->[CN_RBUF];
-    $c->[CN_WBUF] = ngxe_buf() if !defined $c->[CN_WBUF];
+    $c->[CN_RBUF] = ngxe_xbuf() if !defined $c->[CN_RBUF];
+    $c->[CN_WBUF] = ngxe_xbuf() if !defined $c->[CN_WBUF];
     $c->[CN_RMAX] = undef;
     $c->[CN_WOFF] = 0;
     $c->[CN_WIND] = 0;
@@ -436,15 +510,20 @@ sub _read {
     my $c     = $_[0];
     my $fh    = $_[0]->[CN_FH];
     my $buf   = $_[0]->[CN_RBUF];
-    my $size  = defined $_[0]->[CN_RMAX] && $_[0]->[CN_RMAX] <= $NGXE_BUFSIZE
-                    ? $_[0]->[CN_RMAX] : $NGXE_BUFSIZE;
+#     my $size  = defined $_[0]->[CN_RMAX] && $_[0]->[CN_RMAX] <= $NGXE_BUFSIZE
+#                     ? $_[0]->[CN_RMAX] : $NGXE_BUFSIZE;
+
+    # ignoring buffer size completely
+#     my $size  = defined $_[0]->[CN_RMAX] ? $_[0]->[CN_RMAX] : $NGXE_BUFSIZE;
+    my $size  = defined $_[0]->[CN_RMAX] ? $_[0]->[CN_RMAX] : 0;
 
     my $total = length($$buf);
     my $error = 0;
     my $eof   = 0;
 
-    while ($total < $size) {
-        my $len = sysread($fh, $$buf, $size - $total, length($$buf));
+    while ($size == 0 || $total < $size) {
+        my $len = sysread($fh, $$buf, $size ? $size - $total : 32768, 
+                                                            length($$buf));
 
         if (!defined $len) {
             if ($!{EAGAIN} || $!{EWOULDBLOCK}) {
@@ -490,13 +569,26 @@ sub _read {
 
     if ($error) {
         ngxe_close($_[0]);
-    } elsif (vec($rin, $_[0]->[CN_FILENO], 1) == 1 && 
-             (ref $_[0]->[CN_WBUF] eq 'SCALAR' && 
-              length(${$_[0]->[CN_WBUF]}) > 0) ||
-             (ref $_[0]->[CN_WBUF] eq 'REF' &&
-              ref ${$_[0]->[CN_WBUF]} eq 'SCALAR') ||
-             (ref $_[0]->[CN_WBUF] eq 'REF' &&
-              ref ${$_[0]->[CN_WBUF]} eq 'ARRAY')) 
+    } elsif (
+        vec($rout, $_[0]->[CN_FILENO], 1) == 1 && (
+            ( 
+                (
+                    ref $_[0]->[CN_WBUF] eq 'SCALAR' || 
+                    ref $_[0]->[CN_WBUF] eq 'Nginx::Engine::PP::Buf' 
+                ) && length(${$_[0]->[CN_WBUF]}) > 0 
+            ) || (
+                ref $_[0]->[CN_WBUF] eq 'REF' && (
+                    ref ${$_[0]->[CN_WBUF]} eq 'SCALAR' ||
+                    ref ${$_[0]->[CN_WBUF]} eq 'Nginx::Engine::PP::Buf'
+                )
+            ) || (
+                ref $_[0]->[CN_WBUF] eq 'REF' && (
+                    ref ${$_[0]->[CN_WBUF]} eq 'Nginx::Engine::PP::Bufarray' ||
+                    ref ${$_[0]->[CN_WBUF]} eq 'ARRAY'
+                )
+            )
+        )
+    ) 
     {
         $_[0]->[CN_WIND] = 0;
         $_[0]->[CN_WOFF] = 0;
@@ -538,13 +630,13 @@ sub ngxe_close ($) {
     }
 
     if (defined $_[0]->[CN_RBUF]) {
-        ngxe_buffree($_[0]->[CN_RBUF]);
-        $_[0]->[CN_RBUF] = undef;
+        ngxe_xbuffree($_[0]->[CN_RBUF]);
+        delete $_[0]->[CN_RBUF];
     }
 
     if (defined $_[0]->[CN_WBUF]) {
-        ngxe_buffree($_[0]->[CN_WBUF]);
-        $_[0]->[CN_WBUF] = undef;
+        ngxe_xbuffree($_[0]->[CN_WBUF]);
+        delete $_[0]->[CN_WBUF];
     }
 
     vec($rin,  $_[0]->[CN_FILENO], 1) = 0;
@@ -559,10 +651,10 @@ sub ngxe_close ($) {
     delete $FDSET{$_[0]->[CN_FILENO]};
     delete $CONN{$_[0]->[CN_FILENO]};
 
-    $c->[CN_FH]     = undef;
-    $c->[CN_FILENO] = undef;
-    $c->[CN_READ]   = undef;
-    $c->[CN_WRITE]  = undef;
+    undef $c->[CN_FH];
+    undef $c->[CN_FILENO];
+    undef $c->[CN_READ];
+    undef $c->[CN_WRITE];
 
     $c->[CN_CLOSED] = 1;
 
@@ -578,8 +670,8 @@ sub ngxe_writer ($$$$$;@) {
     my $wev = [];
 
     $c->[CN_WRITE] = $wev;
-    $c->[CN_RBUF]  = ngxe_buf() if !defined $c->[CN_RBUF];
-    $c->[CN_WBUF]  = ngxe_buf() if !defined $c->[CN_WBUF];
+    $c->[CN_RBUF]  = ngxe_xbuf() if !defined $c->[CN_RBUF];
+    $c->[CN_WBUF]  = ngxe_xbuf() if !defined $c->[CN_WBUF];
     $c->[CN_RMAX]  = undef;
     $c->[CN_WOFF]  = 0;
     $c->[CN_WIND]  = 0;
@@ -607,22 +699,26 @@ sub _write {
     my $autoempty = 0;
     my $buffers;
 
-    if (ref $_[0]->[CN_WBUF] eq 'SCALAR') {
+    if ((ref $_[0]->[CN_WBUF] eq 'SCALAR' ||
+         ref $_[0]->[CN_WBUF] eq 'Nginx::Engine::PP::Buf')) {
 
         $buffers = [$_[0]->[CN_WBUF]];
         $autoempty = 1;
         $_[0]->[CN_WIND] = 0;
 
     } elsif (ref $_[0]->[CN_WBUF] eq 'REF' && 
-             ref ${$_[0]->[CN_WBUF]} eq 'SCALAR') {
+             (ref ${$_[0]->[CN_WBUF]} eq 'SCALAR' ||
+              ref ${$_[0]->[CN_WBUF]} eq 'Nginx::Engine::PP::Buf')) {
 
         $buffers = [${$_[0]->[CN_WBUF]}];
         $_[0]->[CN_WIND] = 0;
 
     } elsif (ref $_[0]->[CN_WBUF] eq 'REF' && 
-             ref ${$_[0]->[CN_WBUF]} eq 'ARRAY') {
+             (ref ${$_[0]->[CN_WBUF]} eq 'ARRAY' ||
+              ref ${$_[0]->[CN_WBUF]} eq 'Nginx::Engine::PP::Bufarray')) {
 
         $buffers = ${$_[0]->[CN_WBUF]};
+
     } else {
         die "Unknown write buffer type\n";
     }
@@ -810,6 +906,47 @@ sub ngxe_client ($$$$$;@) {
 
 
 
+sub END {
+    $NOPUSHBACK = 1;
+}
+
+1;
+package Nginx::Engine::PP::Buf;
+
+sub DESTROY {
+    return if $NOPUSHBACK;
+
+    my $self = shift;
+
+    my $buf = \${$self};
+    substr($$buf, 0, length($$buf), '');
+    bless $buf, 'Nginx::Engine::PP::Buf';
+    push @BUFSPOOL, $buf;
+
+    $self = undef;
+
+    $BUFSINUSE--;
+    $BUFSFREE++;
+}
+
+1;
+package Nginx::Engine::PP::Bufarray;
+
+sub DESTROY {
+
+    for (0 .. $#{$_[0]}) {
+        next if !defined $_[0]->[$_] || ref $_[0]->[$_] ne 'SCALAR';
+        ${$_[0]->[$_]} = '';
+
+        push @BUFSPOOL, $_[0]->[$_];
+
+        $_[0]->[$_] = undef;
+
+        $BUFSINUSE--;
+        $BUFSFREE++;
+    }
+}
+
 1;
 __END__
 
@@ -821,7 +958,7 @@ Nginx::Engine::PP - Pure-perl implementation of the Nginx::Engine
 
     use Nginx::Engine::PP;
 
-    ngxe_init("/path/to/ngxe-error.log", 256);
+    ngxe_init "/path/to/ngxe-error.log", 256;
 
     # ...
 
@@ -830,9 +967,9 @@ Nginx::Engine::PP - Pure-perl implementation of the Nginx::Engine
 =head1 DESCRIPTION
 
 Pure-perl implementation af the Nginx::Engine. Might be useful
-on Windows or if you want to do something that cannot be done cooretly
+on Windows or if you want to do something that cannot be done correctly
 using XS implementation, like fork()'ing another process for every
-request. But this is not a bad thing, you should newer use fork() or 
+request. But this is not a bad thing, you should never use fork() or 
 something that blocks for a long time in a high-performance event loop.
 Use separate process instead.
 
@@ -844,12 +981,9 @@ L<Nginx::Engine>
 
 Alexandr Gomoliako <zzz@zzz.org.ua>
 
-=head1 LICENSE
+=head1 COPYRIGHT
 
 Copyright 2011 Alexandr Gomoliako. All rights reserved.
-
-This module is free software. It may be used, redistributed and/or modified 
-under the same terms as Perl itself.
 
 =cut
 

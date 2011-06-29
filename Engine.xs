@@ -5,10 +5,18 @@ static int ngxe_initialized;
 static int ngxe_initialized_signals;
 static int reader_buffer_size;
 
-MODULE = Nginx::Engine		PACKAGE = Nginx::Engine		
+MODULE = Nginx::Engine		PACKAGE = Nginx::Engine
+
+BOOT: 
+#ifdef HAS_GETPAGESIZE
+	ngxe_pagesize = getpagesize();
+#else
+	ngxe_pagesize = 0;
+#endif
+	reader_buffer_size = 4080;
 
 
-
+PROTOTYPES: DISABLE
 
 SV *
 ngxe_interval_set(msec, sub, ...)
@@ -287,7 +295,7 @@ ngxe_reader(connection, start, timeout, sub, ...)
 		bufcln->data = (void *) cb->args[2];
 		bufcln->handler = ngxe_buf_cleanup;
 #else
-		cb->args[2] = sv_2mortal(newSV(reader_buffer_size));
+		cb->args[2] = sv_2mortal(ngxe_buf_newsv(reader_buffer_size));
 		SvREFCNT_inc(cb->args[2]);
 		SvPOK_only(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
@@ -426,6 +434,8 @@ void
 ngxe_writer_buffer_set(connection, data) 
 	void  *connection
 	SV    *data
+    ALIAS:
+	ngxe_writer_put = 2
     CODE:
 	ngx_connection_t    *c;
 	ngxe_session_t      *s;
@@ -649,7 +659,7 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 		bufcln->data = (void *) cb->args[2];
 		bufcln->handler = ngxe_buf_cleanup;
 #else
-		cb->args[2] = sv_2mortal(newSV(reader_buffer_size));
+		cb->args[2] = sv_2mortal(ngxe_buf_newsv(reader_buffer_size));
 		SvREFCNT_inc(cb->args[2]);
 		SvPOK_on(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
@@ -1109,8 +1119,6 @@ ngxe_init(filename, ...)
 		XSRETURN_UNDEF;
 	}
 
-	reader_buffer_size = 32768;
-
 	connections = 512;
 
 	if (items >= 2) {
@@ -1158,11 +1166,26 @@ ngxe_loop()
 		    break;
 		}
 
+	        if (ngx_reconfigure) {
+		    ngx_reconfigure = 0;
+
+		}
+
 		if (ngx_reopen) {
 		    ngx_reopen = 0;
 		    ngx_reopen_files((ngx_cycle_t *) ngx_cycle, (ngx_uid_t) -1);
         	}
 	}
+
+
+
+int
+ngxe_bufsize()
+    CODE:
+	RETVAL = reader_buffer_size;
+    OUTPUT:
+	RETVAL
+
 
 void
 ngxe_reader_init_buffer_size(bufsize) 
@@ -1179,22 +1202,15 @@ ngxe_reader_init_buffer_size(bufsize)
 
 
 
-
-SV *
-ngxe_newSV(size)
-	int size
-    CODE:
-	RETVAL = newSV(size);
-	SvPOK_only(RETVAL);
-	SvCUR_set(RETVAL, 0);
-    OUTPUT:
-	RETVAL
-
-
 SV *
 ngxe_buf()
     CODE:
 	SV  *sv, *rv;
+
+	if (ngxe_initialized != 1) {
+		croak("You need to call ngxe_init() first");
+		XSRETURN_UNDEF;
+	}
 
 	sv = ngxe_buf();
 	rv = newRV_noinc(sv);
@@ -1213,59 +1229,41 @@ ngxe_buffree(rv)
 
 	ngxe_buffree(sv);
 
-        SvRV_set(rv, &PL_sv_undef); 
-	SvSetSV(rv, &PL_sv_undef); 
+	SvOK_off(rv);
+
+
+
+
+
+
+
 
 
 
 
 SV *
-ngxe_blessed(size)
-	int   size
+ngxe_newSV(size)
+	int size
     CODE:
+	RETVAL = newSV(size);
+	SvPOK_only(RETVAL);
+	SvCUR_set(RETVAL, 0);
+    OUTPUT:
+	RETVAL
+
+
+
+void
+ngxe_SvGROW(sv, size)
 	SV  *sv;
-
-	sv = newSV(size);
-	SvPOK_only(sv);
-	SvCUR_set(sv, 0);
-
-	RETVAL = newRV_noinc(sv);
-	sv_bless(RETVAL, gv_stashpv("Nginx::Engine", 0));
-    OUTPUT:
-	RETVAL
-
-
-
-
-
-
-int
-ngxe_parse_http_request(buf, envref)
-	SV  *buf
-	SV  *envref
+	int  size
     CODE:
-
-	if (!SvROK(envref) || SvTYPE(SvRV(envref)) != SVt_PVHV)
-		croak("second param to parse_http_request must be a hashref");
- 
-	RETVAL = ngxe_parse_http_request(buf, envref);
-    OUTPUT:
-	RETVAL
+	SvGROW(sv, size);
 
 
-
-int
-ngxe_parse_http_request_psgi(buf, envref)
-	SV  *buf
-	SV  *envref
+void
+ngxe_SvPV_renew(sv, size)
+	SV  *sv;
+	int  size
     CODE:
-
-	if (!SvROK(envref) || SvTYPE(SvRV(envref)) != SVt_PVHV)
-		croak("second param to parse_http_request must be a hashref");
- 
-	RETVAL = ngxe_parse_http_request_psgi(buf, envref);
-    OUTPUT:
-	RETVAL
-
-
-
+	SvPV_renew(sv, size);

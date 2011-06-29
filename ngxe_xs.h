@@ -25,11 +25,5 @@ void  ngxe_callback_dec(ngxe_callback_t *cb);
 void  ngxe_callback(ngxe_callback_t *cb, char decrefcnts);
 void  ngxe_callback_cleanup(void *data);
 
-/* unused */
-void  ngxe_connection_callback(ngxe_callback_t *cb, ngx_connection_t *c, 
-	char decrefcnts);
-void  ngxe_connection_buffer_callback(ngxe_callback_t *cb, ngx_connection_t *c, 
-	SV *buffer);
-
 #endif /* _NGXE_XS_H_INCLUDED_ */
 

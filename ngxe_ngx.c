@@ -586,13 +586,11 @@ ngx_ngxe_init(char *logfilename, int usestderr, int connections)
 
 
 
-
     cycle->conf_ctx = ngx_pcalloc(cycle->pool, ngx_max_module * sizeof(void *));
     if (cycle->conf_ctx == NULL) {
         ngx_destroy_pool(pool);
         return 1;
     }
-
 
 
     rv = ((ngx_core_module_t *) ngx_core_module.ctx)->create_conf(cycle);
@@ -602,7 +600,6 @@ ngx_ngxe_init(char *logfilename, int usestderr, int connections)
     }
 
     cycle->conf_ctx[ngx_core_module.index] = rv;
-
 
 
     if (((ngx_core_module_t *) ngx_core_module.ctx)->init_conf(cycle,
@@ -623,14 +620,12 @@ ngx_ngxe_init(char *logfilename, int usestderr, int connections)
     cycle->conf_ctx[ngx_event_core_module.index] = rv;
 
 
-
     if (((ngx_event_module_t *) ngx_event_core_module.ctx)->init_conf(cycle,
 		cycle->conf_ctx[ngx_event_core_module.index]) == NGX_CONF_ERROR) 
     {
         ngx_destroy_pool(pool);
 	return 1;
     }
-
 
 
     if (ngx_events_modules_init(cycle) == NGX_ERROR) {
@@ -646,8 +641,9 @@ ngx_ngxe_init(char *logfilename, int usestderr, int connections)
     }
 
 
-    cycle->connection_n = connections;
 
+
+    cycle->connection_n = connections;
 
     if (ngx_event_core_module.init_process(cycle) == NGX_ERROR) {
         ngx_destroy_pool(pool);
