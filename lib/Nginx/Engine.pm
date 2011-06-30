@@ -46,7 +46,7 @@ our @EXPORT = qw(
     NXSTART
 );
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 unless ($ENV{'NGXE_PP'}) {
     eval {
@@ -54,6 +54,7 @@ unless ($ENV{'NGXE_PP'}) {
         XSLoader::load('Nginx::Engine', $VERSION);
     };
     if ($@) {
+        warn "Cannot load xs implementation: $@\n" if $ENV{'NGXE_VERBOSE'};
         require Nginx::Engine::PP;
         import Nginx::Engine::PP;
     }

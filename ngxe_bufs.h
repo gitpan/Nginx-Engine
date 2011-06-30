@@ -23,7 +23,7 @@ SV    *ngxe_buf();
 void   ngxe_buffree(SV *sv);
 void   ngxe_buf_cleanup(void *data);
 
-int  ngxe_pagesize;
+extern int  ngxe_pagesize;
 
 /* #define NGXE_READER_USE_BUFS */
 

@@ -1,9 +1,13 @@
 
 use Test::More tests => 1;
 
+BEGIN {
+    $ENV{'NGXE_VERBOSE'} = 1; 
+}
+
 BEGIN { 
     use_ok('Nginx::Engine') 
-};
+}
 
 
 if (defined $Nginx::Engine::PP::VERSION) {

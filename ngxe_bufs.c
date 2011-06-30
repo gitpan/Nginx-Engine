@@ -5,7 +5,7 @@
  * TODO need to cleanup or remove all that, not using it anymore anyway
  */
 
-
+int ngxe_pagesize;
 static ngxe_bufs_t  ngxe_bufs;
 
 #ifndef Newx
