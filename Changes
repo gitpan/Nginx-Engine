@@ -1,5 +1,14 @@
 Revision history for Perl extension Nginx::Engine.
 
+0.09  Sun Jul  3 05:01:24 EEST 2011
+	- Changes in Makefile.PL, shared MakeMaker keys for 
+	  both pure-perl and xs implementation;
+	- a bit smarter fallback;
+	- displaying fallback and build logs in test 00;
+	- SvPVX_const for older perls;
+	- longer waiting time for test 02 and listening on * instead 
+	  of 127.0.0.1;
+
 0.08  Thu Jun 30 21:43:03 EEST 2011
 	- missing extern declaration for ngxe_pagesize;
 

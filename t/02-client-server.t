@@ -19,7 +19,7 @@ ngxe_init($ngxe_error_log, 64);
 
 my $port = 51901;
 my $port_max = 51999;
-while ($port <= $port_max && !defined ngxe_server('127.0.0.1', $port, sub {
+while ($port <= $port_max && !defined ngxe_server('*', $port, sub {
 
     pass "server: accepted the client";
 
@@ -108,7 +108,7 @@ ngxe_client('127.0.0.1', '127.0.0.1', $port, 1000, sub {
 
     }, 28, 29);
 
-    ngxe_writer($_[0], NGXE_START, 1000, "hi\x0d\x0a", sub {
+    ngxe_writer($_[0], NGXE_START, 5000, "hi\x0d\x0a", sub {
         pass "client.writer: writer called back";
         ok $_[4] == 26, "client.writer: arg0 passed to the writer's callback";
         ok $_[5] == 27, "client.writer: arg1 passed to the writer's callback";
@@ -127,7 +127,7 @@ ngxe_client('127.0.0.1', '127.0.0.1', $port, 1000, sub {
 }, 24, 25);
 
 # just in case
-ngxe_timeout_set(5000, sub {
+ngxe_timeout_set(10000, sub {
     fail "timeout: expected exit";
     exit;
 });

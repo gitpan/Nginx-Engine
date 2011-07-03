@@ -108,7 +108,8 @@ ngxe_reader_handler(ngx_event_t *ev)
 RECVAGAIN:
     ngxe_debug("(%p) RECVAGAIN:", c);
 
-    if (SvLEN(svbuf) == SvCUR(svbuf) + 1) {
+    /* if (SvCUR(svbuf) >= SvLEN(svbuf) - 1466) { */
+    if (SvLEN(svbuf) == SvCUR(svbuf) + 1) { 
         ngxe_buf_svgrow(svbuf, SvLEN(svbuf) + 16384);
     }
 

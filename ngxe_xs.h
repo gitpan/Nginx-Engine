@@ -25,5 +25,9 @@ void  ngxe_callback_dec(ngxe_callback_t *cb);
 void  ngxe_callback(ngxe_callback_t *cb, char decrefcnts);
 void  ngxe_callback_cleanup(void *data);
 
+#ifndef SvPVX_const
+#define SvPVX_const(x) SvPVX(x)
+#endif
+
 #endif /* _NGXE_XS_H_INCLUDED_ */
 
