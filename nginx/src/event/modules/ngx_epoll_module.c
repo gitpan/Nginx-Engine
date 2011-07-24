@@ -518,7 +518,9 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
     ngx_int_t          instance, i;
     ngx_uint_t         level;
     ngx_err_t          err;
+#if (NGX_DEBUG)
     ngx_log_t         *log;
+#endif
     ngx_event_t       *rev, *wev, **queue;
     ngx_connection_t  *c;
 
@@ -565,7 +567,9 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
 
     ngx_mutex_lock(ngx_posted_events_mutex);
 
+#if (NGX_DEBUG)
     log = cycle->log;
+#endif
 
     for (i = 0; i < events; i++) {
         c = event_list[i].data.ptr;
@@ -593,6 +597,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
 
         revents = event_list[i].events;
 
+#if (NGX_DEBUG)
         ngx_log_debug3(NGX_LOG_DEBUG_EVENT, log, 0,
                        "epoll: fd:%d ev:%04XD d:%p",
                        c->fd, revents, event_list[i].data.ptr);
@@ -602,6 +607,7 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
                            "epoll_wait() error on fd:%d ev:%04XD",
                            c->fd, revents);
         }
+#endif
 
 #if 0
         if (revents & ~(EPOLLIN|EPOLLOUT|EPOLLERR|EPOLLHUP)) {

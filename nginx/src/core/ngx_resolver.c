@@ -1422,7 +1422,10 @@ ngx_resolver_process_ptr(ngx_resolver_t *r, u_char *buf, size_t n,
     in_addr_t             addr;
     ngx_int_t             digit;
     ngx_str_t             name;
-    ngx_uint_t            i, mask, qtype, qclass, qident;
+    ngx_uint_t            i, mask, qident;
+#if (NGX_DEBUG)
+    ngx_uint_t            qtype, qclass;
+#endif
     ngx_resolver_an_t    *an;
     ngx_resolver_ctx_t   *ctx, *next;
     ngx_resolver_node_t  *rn;
@@ -1514,12 +1517,16 @@ ngx_resolver_process_ptr(ngx_resolver_t *r, u_char *buf, size_t n,
 
     an = (ngx_resolver_an_t *) &buf[i + 2];
 
+#if (NGX_DEBUG)
     qtype = (an->type_hi << 8) + an->type_lo;
     qclass = (an->class_hi << 8) + an->class_lo;
+#endif
     len = (an->len_hi << 8) + an->len_lo;
 
+#if (NGX_DEBUG)
     ngx_log_debug3(NGX_LOG_DEBUG_CORE, r->log, 0,
                   "resolver qt:%ui cl:%ui len:%uz", qtype, qclass, len);
+#endif
 
     i += 2 + sizeof(ngx_resolver_an_t);
 

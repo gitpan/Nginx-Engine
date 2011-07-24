@@ -296,7 +296,7 @@ ngxe_reader(connection, start, timeout, sub, ...)
 		bufcln->handler = ngxe_buf_cleanup;
 #else
 		cb->args[2] = sv_2mortal(ngxe_buf_newsv(reader_buffer_size));
-		SvREFCNT_inc(cb->args[2]);
+		SvREFCNT_inc(cb->args[2]); 
 		SvPOK_only(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
 #endif
@@ -648,7 +648,7 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 #ifdef NGXE_READER_USE_BUFS
 		cb->args[2] = ngxe_buf();
 		SvREFCNT_inc(cb->args[2]);
-		SvPOK_on(cb->args[2]);
+		SvPOK_only(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
 
 		bufcln = ngx_pool_cleanup_add(c->pool, 0);
@@ -660,8 +660,8 @@ ngxe_writer(connection, start, timeout, buffer, sub, ...)
 		bufcln->handler = ngxe_buf_cleanup;
 #else
 		cb->args[2] = sv_2mortal(ngxe_buf_newsv(reader_buffer_size));
-		SvREFCNT_inc(cb->args[2]);
-		SvPOK_on(cb->args[2]);
+		SvREFCNT_inc(cb->args[2]); 
+		SvPOK_only(cb->args[2]);
 		SvCUR_set(cb->args[2], 0);
 #endif
 
@@ -1235,12 +1235,6 @@ ngxe_buffree(rv)
 
 
 
-
-
-
-
-
-
 SV *
 ngxe_newSV(size)
 	int size
@@ -1261,9 +1255,4 @@ ngxe_SvGROW(sv, size)
 	SvGROW(sv, size);
 
 
-void
-ngxe_SvPV_renew(sv, size)
-	SV  *sv;
-	int  size
-    CODE:
-	SvPV_renew(sv, size);
+

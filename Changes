@@ -1,5 +1,11 @@
 Revision history for Perl extension Nginx::Engine.
 
+0.10 
+	- fixed no-unused-but-set in nginx/src/core/ngx_resolver.c, 
+	  nginx/src/event/modules/ngx_epoll_module.c;
+	- removed ngxe_SvPV_renew, caused problems with older perls;
+	- fixed memory leak (appeared in 0.07);
+
 0.09  Sun Jul  3 05:01:24 EEST 2011
 	- Changes in Makefile.PL, shared MakeMaker keys for 
 	  both pure-perl and xs implementation;
