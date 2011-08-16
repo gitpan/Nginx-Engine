@@ -55,7 +55,7 @@ our @EXPORT = qw(
     NXRVBUF
 );
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use constant {
     CN_ID         => 0, CN_FILENO => 0,
@@ -281,7 +281,6 @@ sub ngxe_loop {
         my $t = time;
 
         while (my ($fno, $c) = each %FDSET) {
-
             my $rev = $c->[CN_READ];
             my $wev = $c->[CN_WRITE];
 
@@ -556,6 +555,10 @@ sub _read {
 
     if ($total > 0) {
         &$cb($c, 0, ${$c->[CN_RBUF]}, ${$c->[CN_WBUF]}, $c->[CN_RMAX], @$args);
+
+        if ($_[0]->[CN_CLOSED] || vec($rin, $_[0]->[CN_FILENO], 1) == 0) {
+            return;
+        }
     }
 
     if ($error || $eof) {
@@ -812,7 +815,9 @@ sub _connect {
         my $rv = connect($fh, $remoteaddr);
 
         if (!$rv) {
-            if ($!{EAGAIN} || $!{EWOULDBLOCK} || $!{EINPROGRESS}) {
+            if ($!{EAGAIN} || $!{EWOULDBLOCK} || $!{EINPROGRESS} || 
+                $!{EALREADY}) 
+            {
                 $error = 0;
                 $connected = 0;
                 last;

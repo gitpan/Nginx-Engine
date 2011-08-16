@@ -46,7 +46,7 @@ our @EXPORT = qw(
     NXSTART
 );
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 unless ($ENV{'NGXE_PP'}) {
     eval {

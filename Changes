@@ -1,6 +1,12 @@
 Revision history for Perl extension Nginx::Engine.
 
-0.10 
+0.11  Tue Aug 16 20:02:20 EEST 2011
+	- avoid broken timer failure in timers' test;
+	- more diag messages in tests;
+	- missed check for closed connection in pure-perl implementation;
+	- EALREADY for connect() in pure-perl;
+
+0.10  Sun Jul 24 04:52:47 EEST 2011
 	- fixed no-unused-but-set in nginx/src/core/ngx_resolver.c, 
 	  nginx/src/event/modules/ngx_epoll_module.c;
 	- removed ngxe_SvPV_renew, caused problems with older perls;

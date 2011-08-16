@@ -56,6 +56,7 @@ ngxe_client('127.0.0.1', '127.0.0.1', $port, 1000, sub {
 
     if ($_[1]) {
         pass "client: cannot connect";
+        diag "Cannot connect: $_[1]";
         exit;
     }
 
