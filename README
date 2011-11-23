@@ -1,6 +1,15 @@
 NAME
     Nginx::Engine - Asynchronous framework based on nginx
 
+DESCRIPTION
+    *** IMPORTANT ***
+
+    This project is no longer supported. It did however help me a lot to
+    design and implement decent asynchronous API for nginx.
+
+    New implementation is called nginx-perl and embedded into nginx itself:
+    <https://github.com/zzzcpan/nginx-perl>
+
 SYNOPSIS
         use Nginx::Engine;
 
@@ -64,6 +73,7 @@ SYNOPSIS
             print "Hello, $_[1]!"; 
         }, "World");
 
+
         # Server that echoes everyhing back to the client.
         ngxe_server('*', 55555, sub {
 
@@ -91,25 +101,6 @@ SYNOPSIS
         });
 
         ngxe_loop;
-
-DESCRIPTION
-    Nginx::Engine is a simple high-performance asynchronous networking
-    framework. It's intended to bring nodejs-like performance and nginx's
-    stability into Perl. It's almost as fast as nginx itself. And it can
-    easily handle thousands or even tens of thousands of concurrent
-    connections. Well, just like nginx.
-
-    Internally it initializes nginx to access event loop, event modules and
-    a lot of other core functions nginx provides. For every connection
-    Engine allocates a memory pool and destroys it whenever connection is
-    closed. Engine registers a cleanup function for stored perl arguments
-    and callbacks to decrease their reference count with the destruction of
-    the memory pool. This way memory leaks are not possible even though two
-    different memory allocators are used.
-
-    To achieve stability Nginx::Engine doesn't implement IO functions but
-    rather simply reuses nginx's internal IO. This gives a huge performance
-    boost as well by avoiding as much IO in perl as possible.
 
 LIMITATIONS
     fork() won't work properly in XS implementation. You should not use it
@@ -489,6 +480,17 @@ EXAMPLE: ECHO SERVER
         });
 
         ngxe_loop;
+
+PITFALLS
+    There are a few things you should be aware of before using this project.
+
+    *   There is no proper flow control of events. It is very hard to do
+        something more complicated than simple request and response.
+
+    *   Broken EOF handling. Connection is going to be closed on EOF. And no
+        "shutdown()" as well.
+
+    *   Unclear handling of buffers and other things in @_.
 
 SEE ALSO
     node.js <http://nodejs.org/>, nginx <http://nginx.org/>, POE, AnyEvent

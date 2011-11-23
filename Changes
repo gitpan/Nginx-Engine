@@ -1,5 +1,9 @@
 Revision history for Perl extension Nginx::Engine.
 
+0.12  Wed Nov 23 02:01:40 EET 2011
+	- last release of Nginx::Engine, consider using nginx-perl instead:
+	      https://github.com/zzzcpan/nginx-perl 
+
 0.11  Tue Aug 16 20:02:20 EEST 2011
 	- avoid broken timer failure in timers' test;
 	- more diag messages in tests;

@@ -46,7 +46,7 @@ our @EXPORT = qw(
     NXSTART
 );
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 unless ($ENV{'NGXE_PP'}) {
     eval {
@@ -76,6 +76,16 @@ __END__
 =head1 NAME
 
 Nginx::Engine - Asynchronous framework based on nginx
+
+=head1 DESCRIPTION
+
+*** IMPORTANT ***
+
+This project is no longer supported. It did however help me a lot
+to design and implement decent asynchronous API for nginx.
+
+New implementation is called B<nginx-perl> and embedded into nginx itself:
+L<https://github.com/zzzcpan/nginx-perl>
 
 =head1 SYNOPSIS
 
@@ -169,27 +179,6 @@ Nginx::Engine - Asynchronous framework based on nginx
     });
 
     ngxe_loop;
-
-
-=head1 DESCRIPTION
-
-Nginx::Engine is a simple high-performance asynchronous networking framework.
-It's intended to bring nodejs-like performance and nginx's stability 
-into Perl. It's almost as fast as nginx itself. And it can easily handle 
-thousands or even tens of thousands of concurrent connections. Well, 
-just like nginx. 
-
-Internally it initializes nginx to access event loop, event modules and 
-a lot of other core functions nginx provides. For every connection
-Engine allocates a memory pool and destroys it whenever connection
-is closed. Engine registers a cleanup function for stored perl arguments 
-and callbacks to decrease their reference count with the destruction
-of the memory pool. This way memory leaks are not possible even though 
-two different memory allocators are used.
-
-To achieve stability Nginx::Engine doesn't implement IO functions 
-but rather simply reuses nginx's internal IO. This gives a huge 
-performance boost as well by avoiding as much IO in perl as possible.
 
 =head1 LIMITATIONS
 
@@ -602,6 +591,28 @@ A bit more complex example involving manipulation with the buffers.
     });
 
     ngxe_loop;
+
+=head1 PITFALLS
+
+There are a few things you should be aware of before using this project. 
+
+=over 4
+
+=item
+
+There is no proper flow control of events. It is very hard to do something 
+more complicated than simple request and response. 
+
+=item
+
+Broken EOF handling. Connection is going to be closed on EOF. And 
+no C<shutdown()> as well. 
+
+=item
+
+Unclear handling of buffers and other things in C<@_>. 
+
+=back
 
 =head1 SEE ALSO
 

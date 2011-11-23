@@ -1,9 +1,1 @@
 
-  - ngxe_reloader, ngxe_reopener instead of signals;
-
-  - describe naming, calling and error handling in the documentation,
-    like always issuing a warning if callback is not going to be called
-    on error and always passing error as the second argument, etc;
-
-
-

@@ -15,6 +15,8 @@ lib/Nginx/Engine/PP.pm
 LICENSE
 Makefile.PL
 MANIFEST			This list of files
+MYMETA.json
+MYMETA.yml
 nginx/auto/cc/acc
 nginx/auto/cc/bcc
 nginx/auto/cc/ccc
@@ -267,4 +269,5 @@ t/08-timeoutless.t
 t/09-messages.t
 t/10-buffer-set.t
 TODO
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
